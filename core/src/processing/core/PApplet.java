@@ -9710,7 +9710,15 @@ public class PApplet implements PConstants {
   /** Called when window is resized. */
   public void windowResized() {  }
 
-
+  /**
+   * By default, Processing sketches can't be resized. When
+   * <b>surface.setResizable(true)</b> is used within a sketch,
+   * the window can be resized while it's running.
+   *
+   * @webref environment
+   * @webBrief Define whether the sketch window can be resized while it's running
+   * @param resizable
+   */
   public void windowResizable(boolean resizable) {
     surface.setResizable(resizable);
   }
