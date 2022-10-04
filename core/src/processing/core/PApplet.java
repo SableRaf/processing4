@@ -9756,7 +9756,14 @@ public class PApplet implements PConstants {
   }
 
 
-  /** Called when the window is moved */
+  /**
+   *
+   * Called when the window is moved.
+   *
+   *
+   * @webref environment
+   * @webBrief Called when the sketch window is moved
+   */
   public void windowMoved() {  }
 
 
