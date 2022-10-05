@@ -9815,11 +9815,16 @@ public class PApplet implements PConstants {
 
 
   /**
-   * Scale the sketch as if it fits this specific width and height.
-   * This will also scale the mouseX and mouseY variables (as well as
-   * pmouseX and pmouseY). Note that it will not have an effect on
-   * MouseEvent objects (i.e. event.getX() and event.getY()) because
+   * Scale the sketch as if it fit this specific width and height.
+   * This will also scale the <b>mouseX</b> and <b>mouseY</b> variables (as well as
+   * <b>pmouseX</b> and <b>pmouseY</b>). Note that it will not have an effect on
+   * MouseEvent objects (i.e. <b>event.getX()</b> and <b>event.getY()</b>) because
    * their exact behavior may interact strangely with other libraries.
+   *
+   * @webref environment
+   * @webBrief Scale the sketch as if it fit a specific width and height
+   * @param wide width of the sketch
+   * @param high height of the sketch
    */
   public void windowRatio(int wide, int high) {
     rwidth = wide;
