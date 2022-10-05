@@ -9684,12 +9684,27 @@ public class PApplet implements PConstants {
 
   Map<String, Integer> windowEventQueue = new ConcurrentHashMap<>();
 
-
+  /**
+   *
+   * The <b>windowTitle()</b> function defines the title to appear at the top of the sketch window
+   *
+   * @webref environment
+   * @webBrief The <b>windowTitle()</b> function defines the title to appear at the top of the sketch window
+   * @param title name of the window
+   */
   public void windowTitle(String title) {
     surface.setTitle(title);
   }
 
-
+  /**
+   *
+   * The <b>windowWidth()</b> function defines the width of the sketch window
+   *
+   * @webref environment
+   * @webBrief The <b>windowResize()</b> function defines the size of the sketch window
+   * @param newWidth width of the window
+   * @param newHeight height of the window
+   */
   public void windowResize(int newWidth, int newHeight) {
     surface.setSize(newWidth, newHeight);
   }
@@ -9707,23 +9722,38 @@ public class PApplet implements PConstants {
   }
 
 
-  /** Called when window is resized. */
+  /**
+   * Called every time the sketch window is resized.
+   *
+   * @webref environment
+   * @webBrief Called every time the sketch window is resized
+   */
   public void windowResized() {  }
 
   /**
+   *
    * By default, Processing sketches can't be resized. When
    * <b>surface.setResizable(true)</b> is used within a sketch,
    * the window can be resized while it's running.
    *
    * @webref environment
    * @webBrief Define whether the sketch window can be resized while it's running
-   * @param resizable
+   * @param resizable true to make the window resizable
    */
   public void windowResizable(boolean resizable) {
     surface.setResizable(resizable);
   }
 
-
+  /**
+   * The <b>windowMove()</b> function defines the position of the Processing
+   * sketch in relation to the upper-left corner of the computer screen.
+   *
+   * @webref environment
+   * @webBrief The <b>windowMove()</b> function defines the position of the Processing
+   *           sketch in relation to the upper-left corner of the computer screen
+   * @param x x-coordinate of the window
+   * @param y y-coordinate of the window
+   */
   public void windowMove(int x, int y) {
     surface.setLocation(x, y);
   }
@@ -9762,7 +9792,7 @@ public class PApplet implements PConstants {
    *
    *
    * @webref environment
-   * @webBrief Called when the sketch window is moved
+   * @webBrief Called every time the sketch window is moved
    */
   public void windowMoved() {  }
 
