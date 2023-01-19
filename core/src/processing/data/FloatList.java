@@ -703,16 +703,31 @@ public class FloatList implements Iterable<Float> {
    * Return a random value from the list.
    */
   public float random() {
+    if (count == 0) {
+      throw new ArrayIndexOutOfBoundsException("No entries in this FloatList");
+    }
     return data[(int) (Math.random() * count)];
   }
 
 
-  /**
-   * Return a random value from the list, using the
-   * randomSeed() from the specified sketch object.
-   */
-  public float random(PApplet sketch) {
-    return data[(int) sketch.random(count)];
+//  /**
+//   * Return a random value from the list, using the
+//   * randomSeed() from the specified sketch object.
+//   */
+//  public float random(PApplet sketch) {
+//    if (count == 0) {
+//      throw new ArrayIndexOutOfBoundsException("No entries in this FloatList");
+//    }
+//    return data[(int) sketch.random(count)];
+//  }
+
+
+  public float removeChoice() {
+    if (count == 0) {
+      throw new ArrayIndexOutOfBoundsException("No entries in this IntList");
+    }
+    int index = (int) (Math.random() * count);
+    return remove(index);
   }
 
 

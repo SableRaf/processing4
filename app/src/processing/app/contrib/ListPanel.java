@@ -3,7 +3,7 @@
 /*
   Part of the Processing project - http://processing.org
 
-  Copyright (c) 2013-22 The Processing Foundation
+  Copyright (c) 2013-23 The Processing Foundation
   Copyright (c) 2011-12 Ben Fry and Casey Reas
 
   This program is free software; you can redistribute it and/or modify
@@ -22,6 +22,10 @@
 package processing.app.contrib;
 
 import java.awt.*;
+import java.awt.geom.Arc2D;
+import java.awt.geom.Ellipse2D;
+import java.awt.geom.Line2D;
+import java.awt.image.BufferedImage;
 import java.util.List;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -30,7 +34,6 @@ import javax.swing.*;
 import javax.swing.RowSorter.SortKey;
 import javax.swing.table.*;
 
-import processing.app.Base;
 import processing.app.Util;
 import processing.app.ui.Theme;
 import processing.app.laf.PdeScrollBarUI;
@@ -44,12 +47,6 @@ import processing.app.ui.Toolkit;
 
 public class ListPanel extends JPanel implements Scrollable {
   ContributionTab contributionTab;
-//  static public Comparator<Contribution> COMPARATOR =
-//    Comparator.comparing(o -> o.getName().toLowerCase());
-//  TreeMap<Contribution, StatusPanelDetail> detailForContrib =
-//    new TreeMap<>(ContributionListing.COMPARATOR);
-//  TreeMap<Contribution, StatusPanelDetail> detailForContrib =
-//    new TreeMap<>(Comparator.comparing(o -> o.getName().toLowerCase()));
   Map<Contribution, StatusDetail> detailForContrib =
     new ConcurrentHashMap<>();
 
@@ -62,6 +59,7 @@ public class ListPanel extends JPanel implements Scrollable {
   protected ContributionTableModel model;
 
   // state icons appearing to the left side of the list
+  static final int ICON_SIZE = 16;
   Icon upToDateIcon;
   Icon updateAvailableIcon;
   Icon incompatibleIcon;
@@ -82,7 +80,7 @@ public class ListPanel extends JPanel implements Scrollable {
 
   JScrollPane scrollPane;
 
-  static final SectionHeaderContribution[] sections = {
+  static final SectionHeaderContribution[] sectionHeaders = {
     new SectionHeaderContribution(ContributionType.LIBRARY),
     new SectionHeaderContribution(ContributionType.MODE),
     new SectionHeaderContribution(ContributionType.TOOL),
@@ -97,17 +95,6 @@ public class ListPanel extends JPanel implements Scrollable {
     this.contributionTab = contributionTab;
     this.filter = filter;
 
-    this.rowFilter = new ContributionRowFilter(filter);
-
-//    if (upToDateIcon == null) {
-//      upToDateIcon = Toolkit.getLibIconX("manager/up-to-date");
-//      updateAvailableIcon = Toolkit.getLibIconX("manager/update-available");
-//      incompatibleIcon = Toolkit.getLibIconX("manager/incompatible");
-//      foundationIcon = Toolkit.getLibIconX("icons/foundation", 16);
-//      downloadingIcon = Toolkit.getLibIconX("manager/downloading");
-//    }
-
-    setOpaque(true);
     model = new ContributionTableModel(columns);
     model.enableSections(enableSections);
     table = new JTable(model) {
@@ -118,7 +105,7 @@ public class ListPanel extends JPanel implements Scrollable {
         if (rowValue instanceof SectionHeaderContribution) {
           c.setBackground(sectionColor);
         } else if (isRowSelected(row)) {
-          if (((Contribution) rowValue).isCompatible(Base.getRevision())) {
+          if (((Contribution) rowValue).isCompatible()) {
             c.setBackground(selectionColor);
           } else {
             c.setBackground(selectionColorIncompatible);
@@ -143,7 +130,7 @@ public class ListPanel extends JPanel implements Scrollable {
     scrollPane.getVerticalScrollBar().setUI(new PdeScrollBarUI("manager.scrollbar"));
     scrollPane.setBorder(BorderFactory.createEmptyBorder());
     table.setFillsViewportHeight(true);
-    table.setDefaultRenderer(Contribution.class, new ContribStatusRenderer());
+    table.setDefaultRenderer(Contribution.class, new ContribCellRenderer());
     table.setRowHeight(Toolkit.zoom(28));
     table.setRowMargin(Toolkit.zoom(6));
 
@@ -181,7 +168,8 @@ public class ListPanel extends JPanel implements Scrollable {
 
     sorter = new TableRowSorter<>(model);
     table.setRowSorter(sorter);
-    sorter.setRowFilter(this.rowFilter);
+    rowFilter = new ContributionRowFilter(filter);
+    sorter.setRowFilter(rowFilter);
     for (int i = 0; i < model.getColumnCount(); i++) {
       if (model.columns[i] == ContributionColumn.NAME) {
         sorter.setSortKeys(Collections.singletonList(new SortKey(i, SortOrder.ASCENDING)));
@@ -193,6 +181,7 @@ public class ListPanel extends JPanel implements Scrollable {
     table.getTableHeader().setResizingAllowed(true);
     table.setVisible(true);
 
+    setOpaque(true);
     setLayout(new BorderLayout());
     add(scrollPane, BorderLayout.CENTER);
   }
@@ -212,14 +201,73 @@ public class ListPanel extends JPanel implements Scrollable {
     rowColor = Theme.getColor("manager.list.background.color");
     table.setBackground(rowColor);
 
-    foundationIcon = Toolkit.renderIcon("manager/foundation", Theme.get("manager.list.foundation.color"), 16);
+    foundationIcon = Toolkit.renderIcon("manager/foundation", Theme.get("manager.list.foundation.color"), ICON_SIZE);
 
-    upToDateIcon = Toolkit.renderIcon("manager/list-up-to-date", Theme.get("manager.list.icon.color"), 16);
-    updateAvailableIcon = Toolkit.renderIcon("manager/list-update-available", Theme.get("manager.list.icon.color"), 16);
-    incompatibleIcon = Toolkit.renderIcon("manager/list-incompatible", Theme.get("manager.list.icon.color"), 16);
-    downloadingIcon = Toolkit.renderIcon("manager/list-downloading", Theme.get("manager.list.icon.color"), 16);
+    upToDateIcon = Toolkit.renderIcon("manager/list-up-to-date", Theme.get("manager.list.icon.color"), ICON_SIZE);
+    updateAvailableIcon = Toolkit.renderIcon("manager/list-update-available", Theme.get("manager.list.icon.color"), ICON_SIZE);
+    incompatibleIcon = Toolkit.renderIcon("manager/list-incompatible", Theme.get("manager.list.icon.color"), ICON_SIZE);
+    downloadingIcon = Toolkit.renderIcon("manager/list-downloading", Theme.get("manager.list.icon.color"), ICON_SIZE);
 
     ((PdeScrollBarUI) scrollPane.getVerticalScrollBar().getUI()).updateTheme();
+  }
+
+
+  /**
+   * Render the pie chart or indeterminate spinner for table rows.
+   * @param amount 0..1 for a pie, -1 for indeterminate
+   * @param hash unique offset to prevent indeterminate from being in the same position
+   * @return properly scalable ImageIcon for rendering in the Table at 1x or 2x
+   */
+  Icon renderProgressIcon(float amount, int hash) {
+//    final int FFS_JAVA2D = ICON_SIZE - 2;
+    final float FFS_JAVA2D = ICON_SIZE - 1.5f;
+//    final int scale = Toolkit.highResImages() ? 2 : 1;
+//    final int dim = ICON_SIZE * scale;
+    final int dim = ICON_SIZE * (Toolkit.highResImages() ? 2 : 1);
+//    Image image = Toolkit.offscreenGraphics(this, ICON_SIZE, ICON_SIZE);
+    Image image = new BufferedImage(dim, dim, BufferedImage.TYPE_INT_ARGB);
+//    Graphics2D g2 = (Graphics2D) image.getGraphics();
+//    Toolkit.prepareGraphics(g2);
+    Graphics2D g2 = Toolkit.prepareGraphics(image);
+
+//    g2.setColor(rowColor);
+//    g2.fillRect(0, 0, ICON_SIZE, ICON_SIZE);
+    g2.translate(0.5, 0.5);
+
+    g2.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+
+    Color iconColor = Theme.getColor("manager.list.icon.color");
+    g2.setColor(iconColor);
+
+//    g2.drawOval(0, 0, FFS_JAVA2D, FFS_JAVA2D);
+    Ellipse2D circle = new Ellipse2D.Float(0, 0, FFS_JAVA2D, FFS_JAVA2D);
+
+    if (amount != -1) {
+      // draw ever-growing pie wedge
+      g2.draw(circle);
+
+      int theta = (int) (360 * amount);
+//      g2.fillArc(0, 0, ICON_SIZE-1, ICON_SIZE-1, 90, -theta);
+      Arc2D wedge = new Arc2D.Float(0, 0, FFS_JAVA2D, FFS_JAVA2D, 90, -theta, Arc2D.PIE);
+      g2.fill(wedge);
+
+    } else {
+      // draw indeterminate state
+      g2.fill(circle);
+
+      g2.translate(FFS_JAVA2D/2, FFS_JAVA2D/2);
+      // offset by epoch to avoid integer out of bounds (the date is in 2001)
+      final long EPOCH = 1500000000000L + Math.abs((long) hash);
+      int angle = (int) ((System.currentTimeMillis() - EPOCH) / 20) % 360;
+      g2.rotate(angle);
+
+      g2.setColor(rowColor);
+      float lineRadius = FFS_JAVA2D * 0.3f;
+      g2.draw(new Line2D.Float(-lineRadius, 0, lineRadius, 0));
+    }
+
+    g2.dispose();
+    return Toolkit.wrapIcon(image);
   }
 
 
@@ -238,7 +286,7 @@ public class ListPanel extends JPanel implements Scrollable {
       if (ContributionListing.getInstance().hasUpdates(c)) {
         pos = 2;
       }
-      if (!c.isCompatible(Base.getRevision())) {
+      if (!c.isCompatible()) {
         // This is weird because it means some grayed-out items will
         // show up before non-gray items. We probably need another
         // state icon for 'installed but incompatible' [fry 220116]
@@ -283,16 +331,9 @@ public class ListPanel extends JPanel implements Scrollable {
       super.getTableCellRendererComponent(table, value,
               isSelected, hasFocus, row, column);
 
-//      JTableHeader tableHeader = table.getTableHeader();
-//      if (tableHeader != null) {
-//        setForeground(tableHeader.getForeground());
-//      }
       setForeground(headerFgColor);
-      //setText(getText() + "\u2191\u2193");
       setText(getText() + getSortText(table, column));
       putClientProperty("FlatLaf.styleClass", "small");
-//      setFont(ManagerFrame.SMALL_PLAIN);
-      //setIcon(getSortIcon(table, column));
       setBackground(headerBgColor);
       setBorder(null);
       return this;
@@ -325,10 +366,8 @@ public class ListPanel extends JPanel implements Scrollable {
       SortKey sortKey = getSortKey(table);
       if (sortKey != null && table.convertColumnIndexToView(sortKey.getColumn()) == column) {
         switch (sortKey.getSortOrder()) {
-          case ASCENDING:
-            return "  \u2193";
-          case DESCENDING:
-            return "  \u2191";
+          case ASCENDING -> { return "  ↓"; }
+          case DESCENDING -> { return "  ↑"; }
         }
       }
       // if not sorting on this column
@@ -354,7 +393,7 @@ public class ListPanel extends JPanel implements Scrollable {
   // . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
 
 
-  private class ContribStatusRenderer extends DefaultTableCellRenderer {
+  private class ContribCellRenderer extends DefaultTableCellRenderer {
 
     @Override
     public void setVerticalAlignment(int alignment) {
@@ -369,12 +408,16 @@ public class ListPanel extends JPanel implements Scrollable {
       Contribution contribution = (Contribution) value;
       JLabel label = new JLabel();
       ContributionColumn col = model.columns[column];
+      /*
+      // Removing this workaround for 4.1.2; likely fixed by change
+      // for the concurrent Set used with allContributions list.
       if (value == null) {
         // Working on https://github.com/processing/processing/issues/3667
         //System.err.println("null value seen in getTableCellRendererComponent()");
         // TODO this is now working, but the underlying issue is not fixed
         return label;
       }
+      */
 
       label.setOpaque(true);
 
@@ -382,25 +425,17 @@ public class ListPanel extends JPanel implements Scrollable {
         return label;
       }
       switch (col) {
-        case STATUS:
-        case STATUS_NO_HEADER:
-          configureStatusColumnLabel(label, contribution);
-          break;
-        case NAME:
-          configureNameColumnLabel(table, label, contribution);
-          break;
-        case AUTHOR:
-          configureAuthorsColumnLabel(label, contribution);
-          break;
-        case INSTALLED_VERSION:
-          label.setText(contribution.getBenignVersion());
-          break;
-        case AVAILABLE_VERSION:
-          label.setText(ContributionListing.getInstance().getLatestPrettyVersion(contribution));
-          break;
+        case STATUS, STATUS_NO_HEADER -> configureStatusColumnLabel(label, contribution);
+        case NAME -> configureNameColumnLabel(table, label, contribution);
+        case AUTHOR -> configureAuthorsColumnLabel(label, contribution);
+        case INSTALLED_VERSION -> label.setText(contribution.getBenignVersion());
+        case AVAILABLE_VERSION -> label.setText(ContributionListing.getInstance().getLatestPrettyVersion(contribution));
       }
 
-      if (contribution.isCompatible(Base.getRevision())) {
+      if (contribution instanceof SectionHeaderContribution) {
+        // grouping color for libraries, modes, tools headers in updates panel
+        label.setForeground(textColorIncompatible);
+      } else if (contribution.isCompatible()) {
         label.setForeground(textColor);
       } else {
         label.setForeground(textColorIncompatible);
@@ -414,9 +449,12 @@ public class ListPanel extends JPanel implements Scrollable {
 
       if (detail != null && (detail.updateInProgress || detail.installInProgress)) {
         // Display "loading" icon if download/install in progress
-        icon = downloadingIcon;
+//        icon = downloadingIcon;
+//        float amount = detail.getProgressAmount();
+//        icon = (amount == -1) ? downloadingIcon : renderProgressIcon(amount);
+        icon = renderProgressIcon(detail.getProgressAmount(), contribution.hashCode());
       } else if (contribution.isInstalled()) {
-        if (!contribution.isCompatible(Base.getRevision())) {
+        if (!contribution.isCompatible()) {
           icon = incompatibleIcon;
         } else if (ContributionListing.getInstance().hasUpdates(contribution)) {
           icon = updateAvailableIcon;
@@ -432,11 +470,10 @@ public class ListPanel extends JPanel implements Scrollable {
 
     private void configureNameColumnLabel(JTable table, JLabel label, Contribution contribution) {
       // Generating ellipses based on fontMetrics
-//      final Font boldFont = ManagerFrame.NORMAL_BOLD;
       final Font boldFont = Theme.getFont("manager.list.heavy.font");
       FontMetrics fontMetrics = table.getFontMetrics(boldFont);
       int colSize = table.getColumnModel().getColumn(1).getWidth();
-      int currentWidth = fontMetrics.stringWidth(contribution.getName() + " | ...");
+      int currentWidth = fontMetrics.stringWidth(contribution.getName() + " | …");
       String sentence = Util.removeMarkDownLinks(contribution.getSentence());
       StringBuilder text =
         new StringBuilder("<html><body><font face=\"")
@@ -457,12 +494,11 @@ public class ListPanel extends JPanel implements Scrollable {
         text.append(" | </font>").append(sentence, 0, index);
         // Adding ellipses only if text doesn't fit into the column
         if (index != sentence.length()) {
-          text.append("...");
+          text.append("…");
         }
       }
       text.append("</body></html>");
       label.setText(text.toString());
-//      label.setFont(ManagerFrame.NORMAL_PLAIN);
     }
 
     private void configureAuthorsColumnLabel(JLabel label, Contribution contribution) {
@@ -474,7 +510,6 @@ public class ListPanel extends JPanel implements Scrollable {
       label.setText(name);
       label.setHorizontalAlignment(SwingConstants.LEFT);
       label.setForeground(Color.BLACK);
-      //label.setFont(ManagerFrame.NORMAL_BOLD);
       label.setFont(Theme.getFont("manager.list.heavy.font"));
     }
   }
@@ -527,7 +562,7 @@ public class ListPanel extends JPanel implements Scrollable {
 
     @Override
     public int getRowCount() {
-      return ContributionListing.getInstance().allContributions.size() + (sectionsEnabled ? 4 : 0);
+      return ContributionListing.getAllContribs().size() + (sectionsEnabled ? 4 : 0);
     }
 
     @Override
@@ -550,10 +585,9 @@ public class ListPanel extends JPanel implements Scrollable {
 
     @Override
     public Object getValueAt(int rowIndex, int columnIndex) {
-      final Set<Contribution> allContribs =
-        ContributionListing.getInstance().allContributions;
+      Set<Contribution> allContribs = ContributionListing.getAllContribs();
       if (rowIndex >= allContribs.size()) {
-        return sections[rowIndex - allContribs.size()];
+        return sectionHeaders[rowIndex - allContribs.size()];
       }
       return allContribs.stream().skip(rowIndex).findFirst().orElse(null);
     }
@@ -602,6 +636,9 @@ public class ListPanel extends JPanel implements Scrollable {
     @Override
     public boolean include(Entry<? extends ContributionTableModel, ? extends Integer> entry) {
       Contribution contribution = (Contribution) entry.getValue(0);
+//      if (contributionTab.getName().equals("updates")) {
+//        System.out.println(contributionTab.getName() + " checking " + contribution.getName() + " for inclusion " + includeContribution(contribution));
+//      }
       if (contribution instanceof SectionHeaderContribution) {
         return includeSection((SectionHeaderContribution) contribution);
       }
@@ -615,7 +652,7 @@ public class ListPanel extends JPanel implements Scrollable {
     }
 
     private boolean includeSection(SectionHeaderContribution section) {
-      return ContributionListing.getInstance().allContributions.stream()
+      return ContributionListing.getAllContribs().stream()
         .filter(contribution -> contribution.getType() == section.getType())
         .anyMatch(this::includeContribution);
     }
@@ -635,10 +672,10 @@ public class ListPanel extends JPanel implements Scrollable {
       this.type = type;
 
       switch (type) {
-        case LIBRARY: this.name = "Libraries"; break;
-        case MODE: this.name = "Modes"; break;
-        case TOOL: this.name = "Tools"; break;
-        case EXAMPLES: this.name = "Examples"; break;
+        case LIBRARY -> this.name = "Libraries";
+        case MODE -> this.name = "Modes";
+        case TOOL -> this.name = "Tools";
+        case EXAMPLES -> this.name = "Examples";
       }
     }
 
@@ -671,8 +708,7 @@ public class ListPanel extends JPanel implements Scrollable {
 //      new Exception().printStackTrace(System.out);
 //        long t1 = System.currentTimeMillis();
         //StatusPanelDetail newPanel = new StatusPanelDetail(this);
-        StatusDetail newPanel =
-          new StatusDetail(contributionTab.base, contributionTab.statusPanel);
+        StatusDetail newPanel = contributionTab.createStatusDetail();
         detailForContrib.put(contribution, newPanel);
         newPanel.setContrib(contribution);
 //      add(newPanel);
@@ -704,37 +740,28 @@ public class ListPanel extends JPanel implements Scrollable {
 
   // Thread: EDT
   protected void contributionChanged(final Contribution oldContrib,
-                                  final Contribution newContrib) {
+                                     final Contribution newContrib) {
     if (filter.matches(oldContrib)) {
-//    if (true || filter.matches(oldContrib)) {
-//      System.out.println(contributionTab.contribType + " tab: " +
-//        "changed " + oldContrib + " -> " + newContrib);
-//      new Exception().printStackTrace(System.out);
       StatusDetail detail = detailForContrib.get(oldContrib);
-//      if (panel == null) {
-////        System.out.println("panel null for " + newContrib);
-//        contributionAdded(newContrib);
-//      } else {
-        detailForContrib.remove(oldContrib);
-        detail.setContrib(newContrib);
-        detailForContrib.put(newContrib, detail);
-        model.fireTableDataChanged();
-//      }
+      detailForContrib.remove(oldContrib);
+      detail.setContrib(newContrib);
+      detailForContrib.put(newContrib, detail);
+      model.fireTableDataChanged();
     }
   }
 
 
   // Thread: EDT
-  protected void filterLibraries(String category, List<String> filters) {
+  protected void updateFilter(String category, List<String> filters) {
     rowFilter.setCategoryFilter(category);
     rowFilter.setStringFilters(filters);
     model.fireTableDataChanged();
   }
 
 
-  protected void fireChange() {
-    model.fireTableDataChanged();
-  }
+//  protected void fireChange() {
+//    model.fireTableDataChanged();
+//  }
 //  protected void filterDummy(String category) {
 //    System.out.println("LAST CHANCE DUMMY");
 ////    rowFilter.setCategoryFilter(category);

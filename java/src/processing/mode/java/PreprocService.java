@@ -2,7 +2,7 @@
 
 /*
 Part of the Processing project - http://processing.org
-Copyright (c) 2012-19 The Processing Foundation
+Copyright (c) 2012-23 The Processing Foundation
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License version 2
@@ -23,7 +23,6 @@ package processing.mode.java;
 import java.io.File;
 import java.io.IOException;
 import java.io.StringWriter;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -78,7 +77,8 @@ public class PreprocService {
   private final static int TIMEOUT_MILLIS = 100;
   private final static int BLOCKING_TIMEOUT_SECONDS = 3000;
 
-  protected final JavaEditor editor;
+  protected final JavaMode javaMode;
+  protected final Sketch sketch;
 
   protected final ASTParser parser = ASTParser.newParser(AST.JLS11);
 
@@ -98,14 +98,12 @@ public class PreprocService {
       complete(null); // initialization block
     }};
 
-  private volatile boolean enabled = true;
-
   /**
    * Create a new preprocessing service to support an editor.
-   * @param editor The editor supported by this service and receives issues.
    */
-  public PreprocService(JavaEditor editor) {
-    this.editor = editor;
+  public PreprocService(JavaMode javaMode, Sketch sketch) {
+    this.javaMode = javaMode;
+    this.sketch = sketch;
 
     // Register listeners for first run
     whenDone(this::fireListeners);
@@ -178,15 +176,13 @@ public class PreprocService {
    * Indicate to this service that the sketch code has changed.
    */
   public void notifySketchChanged() {
-    if (enabled) {
-      synchronized (requestLock) {
-        if (preprocessingTask.isDone()) {
-          preprocessingTask = new CompletableFuture<>();
-          // Register callback which executes all listeners
-          whenDone(this::fireListeners);
-        }
-        requestQueue.offer(Boolean.TRUE);
+    synchronized (requestLock) {
+      if (preprocessingTask.isDone()) {
+        preprocessingTask = new CompletableFuture<>();
+        // Register callback which executes all listeners
+        whenDone(this::fireListeners);
       }
+      requestQueue.offer(Boolean.TRUE);
     }
   }
 
@@ -243,7 +239,6 @@ public class PreprocService {
    *    {PreprocessedSketch} that has any {Problem} instances that were resultant.
    */
   public void whenDone(Consumer<PreprocSketch> callback) {
-    if (!enabled) return;
     registerCallback(callback);
   }
 
@@ -259,7 +254,6 @@ public class PreprocService {
    * </p>
    */
   public void whenDoneBlocking(Consumer<PreprocSketch> callback) {
-    if (!enabled) return;
     try {
       registerCallback(callback).get(BLOCKING_TIMEOUT_SECONDS, TimeUnit.SECONDS);
     } catch (InterruptedException | ExecutionException | TimeoutException e) {
@@ -342,8 +336,7 @@ public class PreprocService {
     List<ImportStatement> codeFolderImports = result.codeFolderImports;
     List<ImportStatement> programImports = result.programImports;
 
-    JavaMode javaMode = (JavaMode) editor.getMode();
-    Sketch sketch = result.sketch = editor.getSketch();
+    result.sketch = this.sketch;
     String className = sketch.getMainName();
 
     StringBuilder workBuffer = new StringBuilder();
@@ -361,6 +354,7 @@ public class PreprocService {
         String newPieceBuilt = getSketchTabContents(sc) + '\n';
         numLines += SourceUtil.getCount(newPieceBuilt, "\n");
         workBuffer.append(newPieceBuilt);
+
       } else if (sc.isExtension("java")) {
         tabStartsList.append(workBuffer.length());
         tabLineStarts.add(numLines);
@@ -376,7 +370,7 @@ public class PreprocService {
         workBuffer.append(newPieceBuilt);
       }
     }
-    result.tabStartOffsets = tabStartsList.array();
+    result.tabStartOffsets = tabStartsList.toArray();
 
     String pdeStage = result.pdeCode = workBuffer.toString();
 
@@ -385,7 +379,7 @@ public class PreprocService {
 
     // Core and default imports
     PdePreprocessor preProcessor =
-      editor.createPreprocessor(editor.getSketch().getMainName());
+      PdePreprocessor.builderFor(this.sketch.getMainName()).build();
     if (coreAndDefaultImports == null) {
       coreAndDefaultImports = buildCoreAndDefaultImports(preProcessor);
     }
@@ -418,10 +412,8 @@ public class PreprocService {
     }
 
     if (preprocessorResult.getPreprocessIssues().size() > 0) {
-      final int endNumLines = numLines;
-
       preprocessorResult.getPreprocessIssues().stream()
-          .map((x) -> ProblemFactory.build(x, tabLineStarts, endNumLines, editor))
+          .map((x) -> ProblemFactory.build(x, tabLineStarts))
           .forEach(result.otherProblems::add);
 
       result.hasSyntaxErrors = true;
@@ -693,7 +685,7 @@ public class PreprocService {
   private Path createTemporaryFile(String content) {
     try {
       Path tempFile = Files.createTempFile(null, null);
-      Files.write(tempFile, content.getBytes(StandardCharsets.UTF_8));
+      Files.writeString(tempFile, content);
       return tempFile;
     } catch (IOException e) {
       throw new RuntimeException("Cannot write to temporary folder.");

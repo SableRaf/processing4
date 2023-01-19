@@ -30,9 +30,9 @@
   <property name="examples.dir"
             location="../../processing-examples" />
 
-  <!-- 17.0.4+8 -->
+  <!-- 17.0.5+8 -->
   <property name="jdk.train" value="17" />
-  <property name="jdk.detail" value="${jdk.train}.0.4" />
+  <property name="jdk.detail" value="${jdk.train}.0.5" />
   <property name="jdk.build" value="8" />
   <property name="jdk.folder" value="jdk-${jdk.detail}+${jdk.build}" />
 
@@ -161,6 +161,9 @@
   <!-- <property name="dist.suffix" value="${os.arch}" /> -->
 
   <!-- Figure out the platform-specific output directory for all this work. -->
+  <!-- This is set by antcall to assemble. If we set these up here, then we
+       can't detect when someone is attempting 'ant assemble' (which is bad). -->
+  <!--
   <condition property="target.path"
              value="macos/work/Processing.app/Contents/Java">
     <os family="mac" />
@@ -173,6 +176,7 @@
   <condition property="target.path" value="windows/work">
     <os family="windows" />
   </condition>
+  -->
 
   <!-- Libraries required for running processing -->
   <!-- also need to copy these to the bundleapp task for macos -->
@@ -337,6 +341,7 @@
     <copy todir="${target.path}/tools" preservelastmodified="true">
       <fileset dir="shared/tools">
         <patternset>
+          <include name="MovieMaker/tool.properties" />
           <include name="MovieMaker/tool/**" />
           <!-- <include name="**/tool/**" /> -->
         </patternset>
@@ -378,7 +383,7 @@
       </fileset>
     </copy>
 
-    <!-- get the examples folder, but don't require it to buid -->
+    <!-- get the examples folder, but don't require it to build (only required for dist) -->
     <copy todir="${target.path}/modes/java/examples"
           preservelastmodified="true" failonerror="false">
       <fileset dir="${examples.dir}" />

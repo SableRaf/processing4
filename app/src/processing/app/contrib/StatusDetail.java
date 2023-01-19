@@ -3,7 +3,7 @@
 /*
   Part of the Processing project - https://processing.org
 
-  Copyright (c) 2013-22 The Processing Foundation
+  Copyright (c) 2013-23 The Processing Foundation
   Copyright (c) 2011-12 Ben Fry and Casey Reas
 
   This program is free software; you can redistribute it and/or modify
@@ -78,11 +78,11 @@ class StatusDetail {
   }
 
 
-  private void installContribution(AvailableContribution info) {
-    if (info.link == null) {
-      statusPanel.setErrorMessage(Language.interpolate("contrib.unsupported_operating_system", info.getType()));
+  protected float getProgressAmount() {
+    if (progressBar.isIndeterminate()) {
+      return -1;
     } else {
-      installContribution(info, info.link);
+      return (float) progressBar.getValue() / progressBar.getMaximum();
     }
   }
 
@@ -102,10 +102,37 @@ class StatusDetail {
   }
 
 
-  private void installContribution(AvailableContribution ad, String url) {
+  static class StatusAnimator {
+    Thread thread;
+
+    StatusAnimator(ListPanel listPanel) {
+      thread = new Thread(() -> {
+        while (Thread.currentThread() == thread) {
+          //listPanel.repaint();
+          listPanel.table.repaint();
+          // TODO Ideally this should be only calling update on the relevant
+          //      cell with model.fireTableCellUpdated(), but that requires
+          //      more state housekeeping that's already broken. [fry 230115]
+          try {
+            Thread.sleep(100);
+          } catch (InterruptedException ignored) { }
+        }
+      });
+      thread.start();
+    }
+
+    void stop() {
+      thread = null;
+    }
+  }
+
+
+  private void installContribution(AvailableContribution ad, ListPanel listPanel) {
     try {
-      URL downloadUrl = new URL(url);
+      URL downloadUrl = new URL(ad.link);
       progressBar.setVisible(true);
+
+      final StatusAnimator spinner = new StatusAnimator(listPanel);
 
       ContribProgress downloadProgress = new ContribProgress(progressBar) {
         public void finishedAction() { }
@@ -122,6 +149,9 @@ class StatusDetail {
           // if it was a Mode, restore any sketches
           //if (contrib.getType() == ContributionType.MODE) {  // no need
           restoreSketches();
+
+          // stop animating the installation
+          spinner.stop();
         }
 
         public void cancelAction() {
@@ -140,13 +170,23 @@ class StatusDetail {
   }
 
 
-  protected void install() {
-    //clearStatusMessage();
+  protected void installContrib(ListPanel listPanel) {
     statusPanel.clearMessage();
     installInProgress = true;
-    if (contrib instanceof AvailableContribution) {
-      installContribution((AvailableContribution) contrib);
-      ContributionListing.getInstance().replaceContribution(contrib, contrib);
+    if (contrib instanceof AvailableContribution info) {
+      if (info.link == null) {
+        statusPanel.setErrorMessage(Language.interpolate("contrib.missing_link", info.getType()));
+      } else {
+        installContribution(info, listPanel);
+        // NOTE As of 4.1.1 this was being called even if the error message
+        //      above was getting called. Probably harmless, especially since
+        //      the error may never happen, but still… weird. [fry 230114]
+        // TODO More importantly, why is this being called? Seems like this
+        //      should be doing an actual replacement (i.e. what happens with
+        //      the previous contrib?) And because it's usually (always?) not
+        //      actually removing anything, shouldn't this be add? [fry 230114]
+        ContributionListing.getInstance().replaceContribution(contrib, contrib);
+      }
     }
   }
 
@@ -154,8 +194,7 @@ class StatusDetail {
   // TODO Update works by first calling a remove, and then ContribProgress,
   //      of all things, calls install() in its finishedAction() method.
   //      FFS this is gross. [fry 220311]
-  protected void update() {
-    //clearStatusMessage();
+  protected void updateContrib(ListPanel listPanel) {
     statusPanel.clearMessage();
     updateInProgress = true;
 
@@ -163,12 +202,6 @@ class StatusDetail {
 
     // TODO not really a 'restart' anymore, just requires care [fry 220312]
     if (contrib.getType().requiresRestart()) {
-      // For the special "Updates" tab in the manager, there are no progress
-      // bars, so if that's what we're doing, this will create a dummy bar.
-      // TODO Not a good workaround [fry 220312]
-//      if (progressBar == null) {
-//        initProgressBar();
-//      }
       progressBar.setVisible(true);
       progressBar.setIndeterminate(true);
 
@@ -177,9 +210,9 @@ class StatusDetail {
         public void finishedAction() {
           statusPanel.resetProgressBar();
           AvailableContribution ad =
-            contribListing.getAvailableContribution(contrib);
+            contribListing.findAvailableContribution(contrib);
           // install the new version of the Mode (or Tool)
-          installContribution(ad, ad.link);
+          installContribution(ad, listPanel);
         }
 
         @Override
@@ -199,13 +232,13 @@ class StatusDetail {
 
     } else {
       AvailableContribution ad =
-        contribListing.getAvailableContribution(contrib);
-      installContribution(ad, ad.link);
+        contribListing.findAvailableContribution(contrib);
+      installContribution(ad, listPanel);
     }
   }
 
 
-  protected void remove() {
+  protected void removeContrib() {
     //clearStatusMessage();
     statusPanel.clearMessage();
     if (contrib.isInstalled() && contrib instanceof LocalContribution) {

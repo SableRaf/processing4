@@ -38,7 +38,8 @@ import processing.data.StringDict;
 
 
 public class ContributionManager {
-  static ContributionListing listing;
+  static ManagerFrame managerFrame;
+  static ContributionListing contribListing;
 
 
   /**
@@ -106,7 +107,7 @@ public class ContributionManager {
         int amount;
         if (progress != null) {
           int total = 0;
-          while (!progress.isCanceled() && (amount = in.read(b)) != -1) {
+          while (progress.notCanceled() && (amount = in.read(b)) != -1) {
             out.write(b, 0, amount);
             total += amount;
             progress.setProgress(total);
@@ -153,7 +154,7 @@ public class ContributionManager {
         try {
           download(url, null, contribZip, downloadProgress);
 
-          if (!downloadProgress.isCanceled() && !downloadProgress.isException()) {
+          if (downloadProgress.notCanceled() && !downloadProgress.isException()) {
             installProgress.startTask(Language.text("contrib.progress.installing"));
             final LocalContribution contribution =
               ad.install(base, contribZip, false, status);
@@ -162,9 +163,9 @@ public class ContributionManager {
               try {
                 // TODO: run this in SwingWorker done() [jv]
                 EventQueue.invokeAndWait(() -> {
-                  listing.replaceContribution(ad, contribution);
+                  contribListing.replaceContribution(ad, contribution);
                   base.refreshContribs(contribution.getType());
-                  base.setUpdatesAvailable(listing.countUpdates(base));
+                  base.tallyUpdatesAvailable();
                 });
               } catch (InterruptedException e) {
                 e.printStackTrace();
@@ -245,9 +246,9 @@ public class ContributionManager {
             try {
               // TODO: run this in SwingWorker done() [jv]
               EventQueue.invokeAndWait(() -> {
-                listing.replaceContribution(ad, contribution);
+                contribListing.replaceContribution(ad, contribution);
                 base.refreshContribs(contribution.getType());
-                base.setUpdatesAvailable(listing.countUpdates(base));
+                base.tallyUpdatesAvailable();
               });
             } catch (InterruptedException e) {
               e.printStackTrace();
@@ -292,7 +293,7 @@ public class ContributionManager {
           if (contribDir.isDirectory()) {
             File propsFile = new File(contribDir, c.getType() + ".properties");
             if (propsFile.exists()) {
-              StringDict props = Util.readSettings(propsFile);
+              StringDict props = Util.readSettings(propsFile, false);
               if (props != null) {
                 if (c.getName().equals(props.get("name"))) {
                   return;
@@ -375,9 +376,9 @@ public class ContributionManager {
             if (contribution != null) {
               try {
                 EventQueue.invokeAndWait(() -> {
-                  listing.replaceContribution(contrib, contribution);
+                  contribListing.replaceContribution(contrib, contribution);
                   base.refreshContribs(contribution.getType());
-                  base.setUpdatesAvailable(listing.countUpdates(base));
+                  base.tallyUpdatesAvailable();
                 });
               } catch (InterruptedException e) {
                 e.printStackTrace();
@@ -428,7 +429,7 @@ public class ContributionManager {
    *
    * @return a file that does not exist yet
    */
-  public static File getUniqueName(File parentFolder, String fileName) {
+  static public File getUniqueName(File parentFolder, String fileName) {
     File backupFolderForLib;
     int i = 1;
     do {
@@ -486,6 +487,7 @@ public class ContributionManager {
     deleteFlagged(Base.getSketchbookToolsFolder());
 
     installPreviouslyFailed(base, Base.getSketchbookModesFolder());
+
     updateFlagged(base, Base.getSketchbookModesFolder());
     updateFlagged(base, Base.getSketchbookToolsFolder());
 
@@ -549,11 +551,11 @@ public class ContributionManager {
     // https://github.com/processing/processing/issues/5823
     if (installList != null) {
       for (File file : installList) {
-        for (AvailableContribution contrib : listing.advertisedContributions) {
+        for (AvailableContribution contrib : contribListing.availableContribs) {
           if (file.getName().equals(contrib.getName())) {
             file.delete();
             installOnStartUp(base, contrib);
-            EventQueue.invokeAndWait(() -> listing.replaceContribution(contrib, contrib));
+            EventQueue.invokeAndWait(() -> contribListing.replaceContribution(contrib, contrib));
           }
         }
       }
@@ -571,7 +573,31 @@ public class ContributionManager {
     if (!root.exists()) return;  // folder doesn't exist, nothing to update
 
     if (!root.canRead() || !root.canWrite()) {
-      throw new Exception("Please fix read/write permissions for " + root);
+      // Sometimes macOS users disallow access to the Documents folder,
+      // then wonder why there's a problem accessing the Documents folder.
+      // https://github.com/processing/processing4/issues/581
+      // TODO would like this to be in a more central location, but this is
+      //      where it's triggered most consistently, so it's here for now.
+      if (Platform.isMacOS()) {
+        // we're on the EDT here, so it's safe to show the error
+        Messages.showError("Cannot access sketchbook",
+          """
+            There is a problem with the “permissions” for the sketchbook folder.
+            Processing needs access to the Documents folder to save your work.
+            Usually this happens after you click “Don't Allow” when macOS asks
+            for access to your Documents folder. To fix:
+            
+            1. Quit Processing
+            2. Open Applications → Utilities → Terminal
+            3. Type “tccutil reset All org.processing.four” and press return
+            4. Restart Processing, and when prompted for access, click “OK”
+            
+            If that's not the problem, the forum is a good place to get help:
+            https://discourse.processing.org
+            """, null);
+      } else {
+        throw new Exception("Please fix read/write permissions for " + root);
+      }
     }
 
     File[] markedForUpdate = root.listFiles(folder ->
@@ -596,7 +622,7 @@ public class ContributionManager {
 
     if (markedForUpdate != null) {
       for (File folder : markedForUpdate) {
-        StringDict props = Util.readSettings(new File(folder, propFileName));
+        StringDict props = Util.readSettings(new File(folder, propFileName), false);
         if (props != null) {
           String name = props.get("name", null);
           if (name != null) {  // should not happen, but...
@@ -611,7 +637,7 @@ public class ContributionManager {
       }
     }
 
-    for (AvailableContribution contrib : listing.advertisedContributions) {
+    for (AvailableContribution contrib : contribListing.availableContribs) {
       if (updateContribsNames.contains(contrib.getName())) {
         updateContribsList.add(contrib);
       }
@@ -619,7 +645,7 @@ public class ContributionManager {
 
     for (AvailableContribution contrib : updateContribsList) {
       installOnStartUp(base, contrib);
-      listing.replaceContribution(contrib, contrib);
+      contribListing.replaceContribution(contrib, contrib);
     }
   }
 
@@ -627,7 +653,7 @@ public class ContributionManager {
   static private void installOnStartUp(final Base base, final AvailableContribution availableContrib) {
     if (availableContrib.link == null) {
       Messages.showWarning(Language.interpolate("contrib.errors.update_on_restart_failed", availableContrib.getName()),
-                           Language.text("contrib.unsupported_operating_system"));
+                           Language.text("contrib.missing_link"));
     } else {
       try {
         URL downloadUrl = new URL(availableContrib.link);
@@ -656,12 +682,10 @@ public class ContributionManager {
   // . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
 
 
-  static ManagerFrame managerFrame;
-
-
   static public void init(Base base) throws Exception {
 //    long t1 = System.currentTimeMillis();
-    listing = ContributionListing.getInstance(); // Moved here to make sure it runs on EDT [jv 170121]
+    // Moved here to make sure it runs on EDT [jv 170121]
+    contribListing = ContributionListing.getInstance();
 //    long t2 = System.currentTimeMillis();
     managerFrame = new ManagerFrame(base);
 //    long t3 = System.currentTimeMillis();
@@ -669,6 +693,14 @@ public class ContributionManager {
 //    long t4 = System.currentTimeMillis();
 //    System.out.println("ContributionManager.init() " + (t2-t1) + " " + (t3-t2) + " " + (t4-t3));
   }
+
+
+  /*
+  static public void downloadAvailable() {
+    //ContributionListing cl = ContributionListing.getInstance();
+    contribListing.downloadAvailableList(base, new ContribProgress(null));
+  }
+  */
 
 
   static public void updateTheme() {

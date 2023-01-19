@@ -50,6 +50,22 @@ public class ParserTests {
     }
   }
 
+  static void expectRunnerException(final String id) {
+    try {
+      preprocess(id, res(id + ".pde"));
+      fail("Expected to fail");
+    } catch (SketchException e) {
+      assertNotNull(e);
+    } catch (PdePreprocessIssueException e) {
+      assertNotNull(e.getIssue().getMsg());
+    } catch (Exception e) {
+      if (!e.equals(e.getCause()) && e.getCause() != null)
+        fail(e.getCause().toString());
+      else
+        fail(e.toString());
+    }
+  }
+
   static void expectRunnerException(final String id,
                                     final int expectedLine) {
 
@@ -303,6 +319,11 @@ public class ParserTests {
   }
 
   @Test
+  public void staticannotations() {
+    expectGood("staticannotations", true);
+  }
+
+  @Test
   public void generics() {
     expectGood("generics", true);
   }
@@ -419,7 +440,7 @@ public class ParserTests {
 
   @Test
   public void testMixing() {
-    expectRunnerException("mixing", 1);
+    expectRunnerException("mixing", 6);
   }
 
   @Test
@@ -441,6 +462,36 @@ public class ParserTests {
   public void testMultiMultilineString() {
     Preferences.setBoolean("export.application.fullscreen", true);
     expectGood("fullscreen_export");
+  }
+
+  @Test
+  public void testStaticClass() {
+    expectGood("staticclass");
+  }
+
+  @Test
+  public void testCustomRootClass() {
+    expectGood("customrootclass");
+  }
+
+  @Test
+  public void testExpessionSize() {
+    expectGood("expressionsize");
+  }
+
+  @Test
+  public void testExpessionSizeMethod() {
+    expectGood("expressionsizemethod");
+  }
+
+  @Test
+  public void testExpessionSizeVar() {
+    expectGood("expressionsizevar");
+  }
+
+  @Test
+  public void testWhitespace() {
+    expectGood("whitespace", false);
   }
 
 }

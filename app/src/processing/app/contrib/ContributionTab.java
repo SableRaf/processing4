@@ -34,9 +34,7 @@ import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 
 import processing.app.Base;
-import processing.app.Library;
 import processing.app.laf.PdeComboBoxUI;
-import processing.app.ui.Editor;
 import processing.app.ui.Theme;
 import processing.app.ui.Toolkit;
 
@@ -52,12 +50,14 @@ public class ContributionTab extends JPanel {
   StatusPanel statusPanel;
   FilterField filterField;
 
+  /*
   JLabel loaderLabel;
 
   JPanel errorPanel;
   JTextPane errorMessage;
   JButton tryAgainButton;
   JButton closeButton;
+  */
 
   String category;
 
@@ -68,25 +68,35 @@ public class ContributionTab extends JPanel {
     this.managerFrame = dialog;
     this.base = dialog.base;
 
+    /*
     buildErrorPanel();
 
     loaderLabel = new JLabel(Toolkit.getLibIcon("manager/loader.gif"));
     loaderLabel.setOpaque(false);
+    */
   }
 
 
   public ContributionTab(ManagerFrame frame, ContributionType type) {
     this(frame);
-    this.contribType = type;
 
+    contribType = type;
     filter = contrib -> contrib.getType() == contribType;
 
     listPanel = new ListPanel(this, filter, false);
-    // TODO init is after listPanel is created because it calls updateTheme()
-    //      which needs it, but yuck, too messy [fry 220504]
+    // TODO StatusPanel init is after listPanel is created because it calls
+    //      updateTheme() which needs it, but yuck, too messy [fry 220504]
     statusPanel = new StatusPanel(this);
+    initLayout();
 
     ContributionListing.getInstance().addListPanel(listPanel);
+  }
+
+
+  /** Only used for debugging. */
+  @Override
+  public String getName() {
+    return (contribType == null) ? "updates" : contribType.toString();
   }
 
 
@@ -100,25 +110,40 @@ public class ContributionTab extends JPanel {
     listPanel.updateTheme();
     statusPanel.updateTheme();
 
-    closeButton.setIcon(Toolkit.renderIcon("manager/close", Theme.get("manager.error.close.icon.color"), 16));
+    //closeButton.setIcon(Toolkit.renderIcon("manager/close", Theme.get("manager.error.close.icon.color"), 16));
   }
 
 
-  public void rebuildLayout(boolean error, boolean loading) {
+  /*
+  protected void activate() {
+    System.out.println("activating " + contribType);
+    //updateContributionListing();
+    ContributionListing.getInstance().updateInstalledList(base.getInstalledContribs());
+    updateCategoryChooser();
+    //rebuildLayout(false, false);
+    rebuildLayout();
+  }
+  */
+
+
+  /*
+//  public void rebuildLayout(boolean error, boolean loading) {
+  public void rebuildLayout() {
     setLayout();
 
-    listPanel.setVisible(!loading);
-    loaderLabel.setVisible(loading);
-    errorPanel.setVisible(error);
+//    listPanel.setVisible(!loading);
+//    loaderLabel.setVisible(loading);
+//    errorPanel.setVisible(error);
 
-    listPanel.fireChange();
+    listPanel.fireChange();  // wtf, really? every time? [fry 230111]
 
     validate();
     repaint();
   }
+  */
 
 
-  protected void setLayout() {
+  protected void initLayout() {
     if (categoryChooser == null) {
       createComponents();
     }
@@ -147,12 +172,14 @@ public class ContributionTab extends JPanel {
                                 filterWidth, filterWidth, filterWidth)
       .addPreferredGap(LayoutStyle.ComponentPlacement.RELATED,
                        GroupLayout.PREFERRED_SIZE, Short.MAX_VALUE)
-                  .addComponent(categoryChooser,
-                                ManagerFrame.AUTHOR_WIDTH,
-                                ManagerFrame.AUTHOR_WIDTH,
-                                ManagerFrame.AUTHOR_WIDTH)
-                  .addGap(scrollBarWidth)).addComponent(loaderLabel)
-      .addComponent(listPanel).addComponent(errorPanel)
+      .addComponent(categoryChooser,
+                    ManagerFrame.AUTHOR_WIDTH,
+                    ManagerFrame.AUTHOR_WIDTH,
+                    ManagerFrame.AUTHOR_WIDTH)
+      .addGap(scrollBarWidth))
+      //.addComponent(loaderLabel)
+      .addComponent(listPanel)
+      //.addComponent(errorPanel)
       .addComponent(statusPanel));
 
     layout.setVerticalGroup(layout
@@ -164,11 +191,13 @@ public class ContributionTab extends JPanel {
       // https://github.com/processing/processing4/issues/520
       .addPreferredGap(LayoutStyle.ComponentPlacement.RELATED)
       .addGroup(layout.createParallelGroup(GroupLayout.Alignment.CENTER)
-                  .addComponent(loaderLabel)
+                  //.addComponent(loaderLabel)
                   .addComponent(listPanel))
-      .addComponent(errorPanel)
-      .addComponent(statusPanel, GroupLayout.PREFERRED_SIZE,
-                    GroupLayout.DEFAULT_SIZE, GroupLayout.PREFERRED_SIZE));
+                  //.addComponent(errorPanel)
+                  .addComponent(statusPanel,
+                                GroupLayout.PREFERRED_SIZE,
+                                GroupLayout.DEFAULT_SIZE,
+                                GroupLayout.PREFERRED_SIZE));
     layout.linkSize(SwingConstants.VERTICAL, categoryChooser, filterField);
 
     // these will occupy space even if not visible
@@ -194,13 +223,14 @@ public class ContributionTab extends JPanel {
         category = null;
       }
       //filterLibraries(category, filterField.filterWords);
-      filterLibraries();
+      updateFilter();
     });
 
     filterField = new FilterField();
   }
 
 
+  /*
   protected void buildErrorPanel() {
     errorPanel = new JPanel();
     GroupLayout layout = new GroupLayout(errorPanel);
@@ -248,12 +278,13 @@ public class ContributionTab extends JPanel {
     errorPanel.setBackground(Color.PINK);
     errorPanel.validate();
   }
+  */
 
 
   private Set<String> listCategories() {
     Set<String> categories = new HashSet<>();
 
-    for (Contribution c : ContributionListing.getInstance().allContributions) {
+    for (Contribution c : ContributionListing.getAllContribs()) {
       if (filter.matches(c)) {
         for (String category : c.getCategories()) {
           categories.add(category);
@@ -269,8 +300,11 @@ public class ContributionTab extends JPanel {
       categoryChooser.removeAllItems();
 
       Set<String> categories = listCategories();
-      if (categories.size() == 1 &&
-          categories.contains(Contribution.UNKNOWN_CATEGORY)) {
+      // this is a complicated way of saying "if this is the libraries tab"
+      //if (categories.size() == 1 &&
+      //    categories.contains(Contribution.UNKNOWN_CATEGORY)) {
+      if (categories.isEmpty() || // listing not loaded yet
+          contribType != ContributionType.LIBRARY) {
         // Add dummy item for sizing purposes
         // https://github.com/processing/processing4/issues/520
         categoryChooser.addItem("NULL");
@@ -292,9 +326,16 @@ public class ContributionTab extends JPanel {
   }
 
 
-  //protected void filterLibraries(String category, List<String> filters) {
-  protected void filterLibraries() {
-    listPanel.filterLibraries(category, filterField.filterWords);
+  /**
+   * Filter the libraries based on category and filter words.
+   */
+  protected void updateFilter() {
+    listPanel.updateFilter(category, filterField.filterWords);
+  }
+
+
+  protected boolean filterHasFocus() {
+    return filterField != null && filterField.hasFocus();
   }
 
 
@@ -303,6 +344,7 @@ public class ContributionTab extends JPanel {
   //      on all editors? (The change to getActiveEditor() was made
   //      for 4.0b8 because the Editor may have been closed after the
   //      Contrib Manager was opened.) [fry 220311]
+  /*
   protected void updateContributionListing() {
     Editor editor = base.getActiveEditor();
     if (editor != null) {
@@ -323,11 +365,11 @@ public class ContributionTab extends JPanel {
 
 //      List<ToolContribution> tools = base.getToolContribs();
 //      contributions.addAll(tools);
-      contributions.addAll(base.getToolContribs());
+      contributions.addAll(base.getContribTools());
 
 //      List<ModeContribution> modes = base.getModeContribs();
 //      contributions.addAll(modes);
-      contributions.addAll(base.getModeContribs());
+      contributions.addAll(base.getContribModes());
 
 //      List<ExamplesContribution> examples = base.getExampleContribs();
 //      contributions.addAll(examples);
@@ -339,15 +381,16 @@ public class ContributionTab extends JPanel {
       //listPanel.filterDummy(category);
     }
   }
+  */
 
 
-  public void updateStatusDetail(StatusDetail detail) {
-    statusPanel.updateDetail(detail);
+  protected StatusDetail createStatusDetail() {
+    return new StatusDetail(base, statusPanel);
   }
 
 
-  public boolean filterHasFocus() {
-    return filterField != null && filterField.hasFocus();
+  protected void updateStatusDetail(StatusDetail detail) {
+    statusPanel.applyDetail(detail);
   }
 
 
@@ -364,7 +407,7 @@ public class ContributionTab extends JPanel {
 //    Color placeholderColor;
 //    Color backgroundColor;
 
-    FilterField () {
+    FilterField() {
 //      super("");  // necessary?
 
       // a label that appears above the component when empty and not focused
@@ -449,7 +492,7 @@ public class ContributionTab extends JPanel {
 
       filterWords = Arrays.asList(filter.split(" "));
       //filterLibraries(category, filterWords);
-      filterLibraries();
+      updateFilter();
     }
 
     protected void updateTheme() {

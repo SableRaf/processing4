@@ -31,6 +31,8 @@ import processing.app.Library;
 import processing.app.Messages;
 import processing.app.Util;
 import processing.app.ui.Editor;
+import processing.core.PApplet;
+import processing.data.StringDict;
 
 
 public enum ContributionType {
@@ -38,18 +40,12 @@ public enum ContributionType {
 
 
   public String toString() {
-    switch (this) {
-    case LIBRARY:
-      return "library";
-    case MODE:
-      return "mode";
-    case TOOL:
-      return "tool";
-    case EXAMPLES:
-      return "examples";
-    default:
-      throw new IllegalArgumentException();
-    }
+    return switch (this) {
+      case LIBRARY -> "library";
+      case MODE -> "mode";
+      case TOOL -> "tool";
+      case EXAMPLES -> "examples";
+    };
   }
 
 
@@ -66,6 +62,17 @@ public enum ContributionType {
   /** Get the name of the properties file for this type of contribution. */
   public String getPropertiesName() {
     return this + ".properties";
+  }
+
+
+  public StringDict loadProperties(File contribFolder) {
+    File propertiesFile = new File(contribFolder, getPropertiesName());
+    if (propertiesFile.exists()) {
+      return Util.readSettings(propertiesFile, false);
+    } else {
+      System.err.println("Not found: " + propertiesFile);
+    }
+    return null;
   }
 
 
@@ -99,24 +106,51 @@ public enum ContributionType {
 
 
   public File getSketchbookFolder() {
-    switch (this) {
-    case LIBRARY:
-      return Base.getSketchbookLibrariesFolder();
-    case TOOL:
-      return Base.getSketchbookToolsFolder();
-    case MODE:
-      return Base.getSketchbookModesFolder();
-    case EXAMPLES:
-      return Base.getSketchbookExamplesFolder();
-    }
-    return null;
+    return switch (this) {
+      case LIBRARY -> Base.getSketchbookLibrariesFolder();
+      case TOOL -> Base.getSketchbookToolsFolder();
+      case MODE -> Base.getSketchbookModesFolder();
+      case EXAMPLES -> Base.getSketchbookExamplesFolder();
+    };
   }
 
 
   public boolean isCandidate(File potential) {
     return (potential.isDirectory() &&
             new File(potential, toString()).exists() &&
-            !isTempFolderName(potential.getName()));
+            !isTempFolderName(potential.getName()) &&
+            isCompatible(potential));
+  }
+
+
+  /**
+   * Whether this contrib is compatible with this revision of Processing.
+   * Unfortunately, this requires the author to properly set this value.
+   * For instance, with “Python Mode for Processing 3” the max revision
+   * is set to 0 in mode.properties (meaning all newer Processing versions),
+   * even though it properly maxes out with 3.x in contribs.txt.
+   */
+  private boolean isCompatible(File contribFolder) {
+    StringDict properties = loadProperties(contribFolder);
+    if (properties != null) {
+      final int revisionNum = Base.getRevision();
+
+      int minRevision = 0;
+      String minRev = properties.get("minRevision");
+      if (minRev != null) {
+        minRevision = PApplet.parseInt(minRev, 0);
+      }
+
+      int maxRevision = 0;
+      String maxRev = properties.get("maxRevision");
+      if (maxRev != null) {
+        maxRevision = PApplet.parseInt(maxRev, 0);
+      }
+
+      return ((maxRevision == 0 || revisionNum <= maxRevision) && revisionNum >= minRevision);
+    }
+    // Maybe it's ok, maybe it's not. Don't know him; can't vouch for him.
+    return true;
   }
 
 
@@ -158,38 +192,26 @@ public enum ContributionType {
 
 
   LocalContribution load(Base base, File folder) {
-    switch (this) {
-    case LIBRARY:
-      //return new Library(folder);
-      return Library.load(folder);
-    case TOOL:
-      return ToolContribution.load(folder);
-    case MODE:
-      return ModeContribution.load(base, folder);
-    case EXAMPLES:
-      return ExamplesContribution.load(folder);
-    }
-    return null;
+    return switch (this) {
+      case LIBRARY -> Library.load(folder);
+      case TOOL -> ToolContribution.load(folder);
+      case MODE -> ModeContribution.load(base, folder);
+      case EXAMPLES -> ExamplesContribution.load(folder);
+    };
   }
 
 
   List<LocalContribution> listContributions(Base base, Editor editor) {
     List<LocalContribution> contribs = new ArrayList<>();
     switch (this) {
-    case LIBRARY:
-      if (editor != null) {
-        contribs.addAll(editor.getMode().contribLibraries);
+      case LIBRARY -> {
+        if (editor != null) {
+          contribs.addAll(editor.getMode().contribLibraries);
+        }
       }
-      break;
-    case TOOL:
-      contribs.addAll(base.getToolContribs());
-      break;
-    case MODE:
-      contribs.addAll(base.getModeContribs());
-      break;
-    case EXAMPLES:
-      contribs.addAll(base.getContribExamples());
-      break;
+      case TOOL -> contribs.addAll(base.getContribTools());
+      case MODE -> contribs.addAll(base.getContribModes());
+      case EXAMPLES -> contribs.addAll(base.getContribExamples());
     }
     return contribs;
   }

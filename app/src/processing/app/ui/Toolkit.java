@@ -56,6 +56,7 @@ import java.util.regex.Pattern;
 
 import javax.swing.Action;
 import javax.swing.ImageIcon;
+import javax.swing.JButton;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComponent;
 import javax.swing.JMenu;
@@ -156,8 +157,8 @@ public class Toolkit {
 
   /**
    * Create a menu item and set its KeyStroke by name (so it can be stored
-   * in the language settings or the preferences). Syntax is here:
-   * https://docs.oracle.com/javase/8/docs/api/javax/swing/KeyStroke.html#getKeyStroke-java.lang.String-
+   * in the language settings or the preferences). Syntax is .
+   * <a href="https://docs.oracle.com/javase/8/docs/api/javax/swing/KeyStroke.html#getKeyStroke-java.lang.String-">here</a>.
    */
   static public JMenuItem newJMenuItemExt(String base) {
     JMenuItem menuItem = new JMenuItem(Language.text(base));
@@ -188,7 +189,10 @@ public class Toolkit {
    */
   static public JMenuItem newJMenuItem(Action action, int what) {
     JMenuItem menuItem = new JMenuItem(action);
-    menuItem.setAccelerator(KeyStroke.getKeyStroke(what, SHORTCUT_KEY_MASK));
+    // Use putValue() instead of setAccelerator() to work with applyAction()
+//    menuItem.setAccelerator(KeyStroke.getKeyStroke(what, SHORTCUT_KEY_MASK));
+    action.putValue(Action.ACCELERATOR_KEY,
+                    KeyStroke.getKeyStroke(what, SHORTCUT_KEY_MASK));
     return menuItem;
   }
 
@@ -208,7 +212,10 @@ public class Toolkit {
    */
   static public JMenuItem newJMenuItemShift(Action action, int what) {
     JMenuItem menuItem = new JMenuItem(action);
-    menuItem.setAccelerator(KeyStroke.getKeyStroke(what, SHORTCUT_SHIFT_KEY_MASK));
+    // Use putValue() instead of setAccelerator() to work with applyAction()
+//    menuItem.setAccelerator(KeyStroke.getKeyStroke(what, SHORTCUT_SHIFT_KEY_MASK));
+    action.putValue(Action.ACCELERATOR_KEY,
+                    KeyStroke.getKeyStroke(what, SHORTCUT_SHIFT_KEY_MASK));
     return menuItem;
   }
 
@@ -241,40 +248,79 @@ public class Toolkit {
 
 
   /**
-   * Removes all mnemonics, then sets a mnemonic for each menu and menu item
-   * recursively by these rules:
+   * Apply an Action from something else (i.e. a JMenuItem) to a JButton.
+   * Swing is so absof*ckinglutely convoluted sometimes. Do we really need
+   * half a dozen lines of boilerplate to apply a key shortcut to a button?
+   */
+  static public void applyAction(Action action, JButton button) {
+    button.setAction(action);
+    // use an arbitrary but unique name
+    String name = String.valueOf(action.hashCode());
+    button.getActionMap().put(name, action);
+    button.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+      .put((KeyStroke) action.getValue(Action.ACCELERATOR_KEY), name);
+  }
+
+
+  /**
+   * Removes all mnemonics, then sets a mnemonic for each menu and menu
+   * item recursively by these rules:
    * <ol>
    * <li> It tries to assign one of <a href="http://techbase.kde.org/Projects/Usability/HIG/Keyboard_Accelerators">
    * KDE's defaults</a>.</li>
-   * <li> Failing that, it loops through the first letter of each word, where a word
-   *  is a block of Unicode "alphabetical" chars, looking for an upper-case ASCII mnemonic
-   *  that is not taken. This is to try to be relevant, by using a letter well-associated
-   *  with the command. (MS guidelines) </li>
-   * <li> Ditto, but with lowercase. </li>
-   * <li> Next, it tries the second ASCII character, if its width &gt;= half the width of
-   *  'A'. </li>
-   * <li> If the first letters are all taken/non-ASCII, then it loops through the
-   *  ASCII letters in the item, widest to narrowest, seeing if any of them is not taken.
-   *  To improve readability, it discriminates against descenders (qypgj), imagining they
-   *  have 2/3 their actual width. (MS guidelines: avoid descenders). It also discriminates
-   *  against vowels, imagining they have 2/3 their actual width. (MS and Gnome guidelines:
-   *  avoid vowels.) </li>
-   * <li>Failing that, it will loop left-to-right for an available digit. This is a last
-   *  resort because the normal setMnemonic dislikes them.</li>
-   * <li> If that doesn't work, it doesn't assign a mnemonic. </li>
+   * <li>
+   *   Failing that, it loops through the first letter of each word,
+   *   where a word is a block of Unicode "alphabetical" chars, looking
+   *   for an upper-case ASCII mnemonic that is not taken.
+   *   This is to try to be relevant, by using a letter well-associated
+   *   with the command. (MS guidelines)
+   * </li>
+   * <li>
+   *   Ditto, but with lowercase.
+   * </li>
+   * <li>
+   *   Next, it tries the second ASCII character, if its width
+   *   &gt;= half the width of 'A'.
+   * </li>
+   * <li>
+   *   If the first letters are all taken/non-ASCII, then it loops
+   *   through the ASCII letters in the item, widest to narrowest,
+   *   seeing if any of them is not taken. To improve readability,
+   *   it discriminates against descenders (qypgj), imagining they
+   *   have 2/3 their actual width. (MS guidelines: avoid descenders).
+   *   It also discriminates against vowels, imagining they have 2/3
+   *   their actual width. (MS and Gnome guidelines: avoid vowels.)
+   * </li>
+   * <li>
+   *   Failing that, it will loop left-to-right for an available digit.
+   *   This is a last resort because the normal setMnemonic dislikes them.
+   * </li>
+   * <li>
+   *   If that doesn't work, it doesn't assign a mnemonic.
+   * </li>
    * </ol>
    *
-   * As a special case, strings starting "sketchbook \u2192 " have that bit ignored
-   * because otherwise the Recent menu looks awful. However, the name <tt>"sketchbook \u2192
-   * Sketch"</tt>, for example, will have the 'S' of "Sketch" chosen, but the 's' of 'sketchbook
-   * will get underlined.
-   * No letter by an underscore will be assigned.
-   * Disabled on Mac, per Apple guidelines.
-   * <tt>menu</tt> may contain nulls.
+   * Additional rules:
+   * <ul>
+   * <li>
+   *   As a special case, strings starting "sketchbook → " have that
+   *   bit ignored because otherwise the Recent menu looks awful.
+   * </li>
+   * <li>
+   *   However, the name <tt>"sketchbook → Sketch"</tt>,
+   *   for example, will have the 'S' of "Sketch" chosen,
+   *   but the 's' of 'sketchbook' will get underlined.
+   * </li>
+   * <li>
+   *   No letter by an underscore will be assigned.
+   * </li>
+   * <li>
+   *   Disabled on Mac, per Apple guidelines.
+   * </li>
+   * </ul>
    *
-   * Author: George Bateman. Initial work Myer Nore.
-   * @param menu
-   *          A menu, a list of menus or an array of menu items to set mnemonics for.
+   * Written by George Bateman, with Initial work Myer Nore.
+   * @param menu Menu items to set mnemonics for (null entries are ok)
    */
   static public void setMenuMnemonics(JMenuItem... menu) {
     if (Platform.isMacOS()) return;
@@ -369,7 +415,7 @@ public class Toolkit {
       // The string can't be made lower-case as that would spoil
       // the width comparison.
       String cleanString = jmi.getText();
-      if (cleanString.startsWith("sketchbook \u2192 "))
+      if (cleanString.startsWith("sketchbook → "))
         cleanString = cleanString.substring(13);
 
       if (cleanString.length() == 0) continue;
@@ -698,9 +744,11 @@ public class Toolkit {
    */
   static public ImageIcon renderIcon(File file, String color, int size) {
     Image image = renderMonoImage(file, color, size);
-    if (image == null) {
-      return null;
-    }
+    return (image != null) ? wrapIcon(image) : null;
+  }
+
+
+  static public ImageIcon wrapIcon(Image image) {
     final int scale = Toolkit.highResImages() ? 2 : 1;
 
     return new ImageIcon(image) {
@@ -879,16 +927,21 @@ public class Toolkit {
   */
 
 
-  /**
-   * Create an Image to be used as an offscreen drawing context,
-   * automatically doubling the size if running on a retina display.
-   */
-  static public Image offscreenGraphics(Component comp, int width, int height) {
-//    if (ISSUE_342) {
-//      return comp.createImage(dpiScale(width), dpiScale(height));
-//    }
-    int m = Toolkit.isRetina() ? 2 : 1;
-    return comp.createImage(m * width, m * height);
+//  /**
+//   * Create an Image to be used as an offscreen drawing context,
+//   * automatically doubling the size if running on a retina display.
+//   */
+//  static public Image offscreenGraphics(Component comp, int width, int height) {
+////    if (ISSUE_342) {
+////      return comp.createImage(dpiScale(width), dpiScale(height));
+////    }
+//    int m = Toolkit.isRetina() ? 2 : 1;
+//    return comp.createImage(m * width, m * height);
+//  }
+
+
+  static public Graphics2D prepareGraphics(Image image) {
+    return prepareGraphics(image.getGraphics(), true);
   }
 
 
@@ -1190,9 +1243,9 @@ public class Toolkit {
   /**
    * Get the Font object of the default (built-in) monospaced font.
    * As of 4.x, this is Source Code Pro and ships in lib/fonts because
-   * it looks like JDK 11 no longer has (supports?) a "fonts" subfolder
-   * (or at least, its cross-platform implementation is inconsistent).
-   * https://www.oracle.com/java/technologies/javase/11-relnote-issues.html#JDK-8191522
+   * it looks like JDK 11+ <a href="https://www.oracle.com/java/technologies/javase/11-relnote-issues.html#JDK-8191522">
+   * no longer supports</a> a "fonts" subfolder (or at least,
+   * its cross-platform implementation is inconsistent).
    */
   static public Font getMonoFont(int size, int style) {
     // Prior to 4.0 beta 9, we had a manual override for

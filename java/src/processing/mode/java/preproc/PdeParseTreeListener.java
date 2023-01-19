@@ -86,6 +86,7 @@ public class PdeParseTreeListener extends ProcessingBaseListener {
   private boolean sizeIsFullscreen = false;
   private boolean noSmoothRequiresRewrite = false;
   private boolean smoothRequiresRewrite = false;
+  private boolean userImportingManually = false;
   private RewriteResult headerResult;
   private RewriteResult footerResult;
 
@@ -443,6 +444,10 @@ public class PdeParseTreeListener extends ProcessingBaseListener {
 
     foundImports.add(ImportStatement.parse(importStringNoSemi));
 
+    if (importStringNoSemi.startsWith("processing.core.")) {
+      userImportingManually = true;
+    }
+
     delete(ctx.start, ctx.stop);
   }
 
@@ -498,7 +503,7 @@ public class PdeParseTreeListener extends ProcessingBaseListener {
    * @param ctx ANTLR context for the sketch.
    */
   public void exitStaticProcessingSketch(ProcessingParser.StaticProcessingSketchContext ctx) {
-    mode = Mode.STATIC;
+    mode = foundMain ? Mode.JAVA : Mode.STATIC;
   }
 
   /**
@@ -561,7 +566,7 @@ public class PdeParseTreeListener extends ProcessingBaseListener {
 
     int numChildren = possibleModifiers.getChildCount();
 
-    ParserRuleContext annoationPoint = null;
+    ParserRuleContext annotationPoint = null;
 
     for (int i = 0; i < numChildren; i++) {
       boolean childIsVisibility;
@@ -577,16 +582,16 @@ public class PdeParseTreeListener extends ProcessingBaseListener {
 
       boolean isModifier = child instanceof ProcessingParser.ModifierContext;
       if (isModifier && isAnnotation((ProcessingParser.ModifierContext) child)) {
-        annoationPoint = (ParserRuleContext) child;
+        annotationPoint = (ParserRuleContext) child;
       }
     }
 
     // Insert at start of method or after annoation
     if (!hasVisibilityModifier) {
-      if (annoationPoint == null) {
-        insertBefore(possibleModifiers.getStart(), " public ");
+      if (annotationPoint == null) {
+        insertBefore(possibleModifiers.getStart(), "public ");
       } else {
-        insertAfter(annoationPoint.getStop(), " public ");
+        insertAfter(annotationPoint.getStop(), " public ");
       }
     }
 
@@ -630,7 +635,8 @@ public class PdeParseTreeListener extends ProcessingBaseListener {
    * @param ctx ANTLR context for the type token.
    */
   public void exitColorPrimitiveType(ProcessingParser.ColorPrimitiveTypeContext ctx) {
-    if (ctx.getText().equals("color")) {
+    boolean isQualifiedName = ctx.getParent() instanceof ProcessingParser.QualifiedNameContext; 
+    if (ctx.getText().equals("color") && !isQualifiedName) {
       insertAfter(ctx.stop, "int");
       delete(ctx.start, ctx.stop);
     }
@@ -688,17 +694,17 @@ public class PdeParseTreeListener extends ProcessingBaseListener {
     if (isSize && argsContext.getChildCount() > 2) {
       thisRequiresRewrite = true;
 
-      sketchWidth = argsContext.getChild(0).getText();
-      boolean invalidWidth = PApplet.parseInt(sketchWidth, -1) == -1;
-      invalidWidth = invalidWidth && !sketchWidth.equals("displayWidth");
-      if (invalidWidth) {
+      boolean widthValid = sizeParamValid(argsContext.getChild(0));
+      if (widthValid) {
+        sketchWidth = argsContext.getChild(0).getText();
+      } else {
         thisRequiresRewrite = false;
       }
 
-      sketchHeight = argsContext.getChild(2).getText();
-      boolean invalidHeight = PApplet.parseInt(sketchHeight, -1) == -1;
-      invalidHeight = invalidHeight && !sketchHeight.equals("displayHeight");
-      if (invalidHeight) {
+      boolean validHeight = sizeParamValid(argsContext.getChild(2));
+      if (validHeight) {
+        sketchHeight = argsContext.getChild(2).getText();
+      } else {
         thisRequiresRewrite = false;
       }
 
@@ -1071,7 +1077,6 @@ public class PdeParseTreeListener extends ProcessingBaseListener {
    */
   protected void writeImports(PrintWriterWithEditGen headerWriter,
         RewriteResultBuilder resultBuilder) {
-
     writeImportList(headerWriter, coreImports, resultBuilder);
     writeImportList(headerWriter, codeFolderImports, resultBuilder);
     writeImportList(headerWriter, foundImports, resultBuilder);
@@ -1522,6 +1527,38 @@ public class PdeParseTreeListener extends ProcessingBaseListener {
    */
   private ImportStatement createPlainImportStatementInfo(String fullyQualifiedName) {
     return ImportStatement.parse(fullyQualifiedName);
+  }
+
+  private boolean isMethodCall(ParseTree ctx) {
+    return ctx instanceof ProcessingParser.MethodCallContext;
+  }
+
+  private boolean isVariable(ParseTree ctx) {
+    boolean isPrimary = ctx instanceof ProcessingParser.PrimaryContext;
+    if (!isPrimary) {
+      return false;
+    }
+
+    String text = ctx.getText();
+    boolean startsWithAlpha = text.length() > 0 && Character.isAlphabetic(text.charAt(0));
+    return startsWithAlpha;
+  }
+
+  private boolean sizeParamValid(ParseTree ctx) {
+    // Method calls and variables not allowed.
+    if (isMethodCall(ctx) || isVariable(ctx)) {
+      return false;
+    }
+    
+    // If user passed an expression, check subexpressions.
+    for (int i = 0; i < ctx.getChildCount(); i++) {
+      if (!sizeParamValid(ctx.getChild(i))) {
+        return false;
+      }
+    }
+    
+    // If all sub-expressions passed and not identifier, is valid.
+    return true;
   }
 
 }

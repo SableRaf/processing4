@@ -74,6 +74,9 @@ public abstract class Mode {
   public List<Library> coreLibraries;
   public List<Library> contribLibraries;
 
+  // Initialize to empty b/c these may not exist for contributed Mode classes.
+  public List<Library> foundationLibraries = new ArrayList<>();
+
   /** Library folder for core. (Used for OpenGL in particular.) */
   protected Library coreLibrary;
 
@@ -320,7 +323,7 @@ public abstract class Mode {
 
     // Check to see if video and sound are installed and move them
     // from the contributed list to the core list.
-    List<Library> foundationLibraries = new ArrayList<>();
+    foundationLibraries = new ArrayList<>();
     for (Library lib : contribLibraries) {
       if (lib.isFoundation()) {
         foundationLibraries.add(lib);
@@ -767,7 +770,7 @@ public abstract class Mode {
    * Returns the appropriate file extension to use for auxiliary source
    * files in a sketch. For example, in a Java-mode sketch, auxiliary files
    * can be named "Foo.java"; in Python mode, they should be named "foo.py".
-   *
+   * <p/>
    * Modes that do not override this function will get the
    * default behavior of returning the default extension.
    */

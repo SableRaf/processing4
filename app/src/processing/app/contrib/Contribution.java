@@ -26,6 +26,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 
+import processing.app.Base;
 import processing.core.PApplet;
 import processing.data.StringDict;
 import processing.data.StringList;
@@ -189,8 +190,9 @@ abstract public class Contribution {
   }
 
 
-  public boolean isCompatible(int versionNum) {
-    return ((maxRevision == 0 || versionNum <= maxRevision) && versionNum >= minRevision);
+  public boolean isCompatible() {
+    final int revisionNum = Base.getRevision();
+    return ((maxRevision == 0 || revisionNum <= maxRevision) && revisionNum >= minRevision);
   }
 
 
@@ -245,14 +247,16 @@ abstract public class Contribution {
   */
 
 
+  /*
   static public StringDict loadProperties(File contribFolder,
                                           ContributionType type) {
     File propertiesFile = new File(contribFolder, type.getPropertiesName());
     if (propertiesFile.exists()) {
-      return Util.readSettings(propertiesFile);
+      return Util.readSettings(propertiesFile, false);
     }
     return null;
   }
+  */
 
 
   /**
@@ -337,8 +341,7 @@ abstract public class Contribution {
   public boolean equals(Object o) {
     if (this == o) return true;
 
-    if (o instanceof Contribution) {
-      Contribution that = (Contribution) o;
+    if (o instanceof Contribution that) {
       return name.equalsIgnoreCase(that.name);
     }
     return false;

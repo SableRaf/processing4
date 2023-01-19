@@ -28,6 +28,8 @@ public class UpdateContributionTab extends ContributionTab {
   public UpdateContributionTab(ManagerFrame dialog) {
     super(dialog);
 
+    // Filter to show only the contributions with updates available,
+    // or are section headers (which are fake contributions).
     filter = contrib -> {
       if (contrib instanceof ListPanel.SectionHeaderContribution) {
         return true;
@@ -37,15 +39,17 @@ public class UpdateContributionTab extends ContributionTab {
       }
       return false;
     };
-    listPanel = new UpdateListPanel(this, filter);
 
+    listPanel = new UpdateListPanel(this, filter);
     statusPanel = new UpdateStatusPanel(this);
+    initLayout();
+
     ContributionListing.getInstance().addListPanel(listPanel);
   }
 
 
   @Override
-  protected void setLayout() {
+  protected void initLayout() {
     /*
     if (loaderLabel == null) {
 //    if (progressBar == null) {
@@ -63,27 +67,23 @@ public class UpdateContributionTab extends ContributionTab {
     setLayout(layout);
     layout.setHorizontalGroup(layout
       .createParallelGroup(GroupLayout.Alignment.CENTER)
-      .addComponent(loaderLabel)
+      //.addComponent(loaderLabel)
       .addComponent(listPanel)
-      .addComponent(errorPanel)
+      //.addComponent(errorPanel)
       .addComponent(statusPanel));
 
     layout.setVerticalGroup(layout
       .createSequentialGroup()
       .addGroup(layout.createParallelGroup(GroupLayout.Alignment.CENTER)
-                  .addComponent(loaderLabel)
+                  //.addComponent(loaderLabel)
                   .addComponent(listPanel))
-      .addComponent(errorPanel)
-      .addComponent(statusPanel, GroupLayout.PREFERRED_SIZE,
-                    GroupLayout.DEFAULT_SIZE, GroupLayout.PREFERRED_SIZE));
+                  //.addComponent(errorPanel)
+                  .addComponent(statusPanel,
+                                GroupLayout.PREFERRED_SIZE,
+                                GroupLayout.DEFAULT_SIZE,
+                                GroupLayout.PREFERRED_SIZE));
     layout.setHonorsVisibility(listPanel, false);
 
     //setBackground(Color.WHITE);
-  }
-
-
-  @Override
-  public void updateStatusDetail(StatusDetail detail) {
-    // Do nothing
   }
 }

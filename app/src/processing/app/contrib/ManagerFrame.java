@@ -88,15 +88,25 @@ public class ManagerFrame {
   public void showFrame(ContributionType contributionType) {
     ContributionTab showTab = getTab(contributionType);
     if (frame == null) {
+      // Build the Contribution Manager UI on first use.
       makeFrame();
-      // done before as downloadAndUpdateContributionListing()
-      // requires the current selected tab
-      tabs.setPanel(showTab);
-      //downloadAndUpdateContributionListing(base);
-      downloadAndUpdateContributionListing();
-    } else {
-      tabs.setPanel(showTab);
+
+      // Update the list of contribs with what's installed locally.
+      ContributionListing.updateInstalled(base.getInstalledContribs());
+
+      // Set the list of categories on first use. If a new category is added
+      // from an already-installed contrib, or in the downloaded contribs list,
+      // it won't be included. Yech! But practically speaking… [fry 230114]
+      getTab(ContributionType.LIBRARY).updateCategoryChooser();
+
+      // TODO If it's the updates tab, need to reset the list. This is papering
+      //      over a concurrency bug with adding/removing contribs during the
+      //      initial load/startup, but probably always relevant. [fry 230115]
+      if (showTab.contribType == null) {
+        showTab.listPanel.model.fireTableDataChanged();
+      }
     }
+    tabs.setPanel(showTab);
     frame.setVisible(true);
     // Avoid the search box taking focus and hiding the 'search' text
     tabs.requestFocusInWindow();
@@ -108,7 +118,10 @@ public class ManagerFrame {
     frame.setMinimumSize(Toolkit.zoom(750, 500));
     tabs = new ManagerTabs();
 
-    rebuildTabLayouts(false, true);
+    //rebuildTabLayouts(false, true);
+//    for (ContributionTab tab : tabList) {
+//      tab.rebuildLayout();
+//    }
 
     tabs.addPanel(librariesTab, "Libraries");
     tabs.addPanel(modesTab, "Modes");
@@ -181,58 +194,33 @@ public class ManagerFrame {
   }
 
 
+  /*
   // TODO move this to ContributionTab (this is handled weirdly, period) [fry]
   //void downloadAndUpdateContributionListing(Base base) {
   void downloadAndUpdateContributionListing() {
     //activeTab is required now but should be removed
     //as there is only one instance of contribListing, and it should be present in this class
-    final ContributionTab activeTab = getActiveTab();
+//    final ContributionTab activeTab = getActiveTab();
+    ContributionTab activeTab = (ContributionTab) tabs.getPanel();
 
-    /*
-    final JProgressBar bar = activeTab.progressBar;
-    ContribProgress progress = new ContribProgress(bar) {
-      @Override
-      public void startTask(String name, int maxValue) {
-        super.startTask(name, maxValue);
-        bar.setVisible(true);
-        bar.setString(null);
-      }
+//        activeTab.updateContributionListing();
+    ContributionListing.updateInstalled(base);
+    activeTab.updateCategoryChooser();
 
-      @Override
-      public void setProgress(int value) {
-        super.setProgress(value);
-        bar.setValue(value);
-      }
-
-      @Override
-      public void finishedAction() {
-        bar.setVisible(false);
-    */
-        activeTab.updateContributionListing();
-        activeTab.updateCategoryChooser();
-
-    /*
-        Exception exception = getException();
-        if (exception != null) {
-          exception.printStackTrace();
-          makeAndShowTab(true, false);
-        } else {
-     */
-          rebuildTabLayouts(false, false);
-    /*
-        }
-      }
-    };
-    ContributionListing.getInstance().downloadAvailableList(base, progress);
-    */
+    //rebuildTabLayouts(false, false);
+    //activeTab.rebuildLayout(false, false);
+    activeTab.rebuildLayout();
   }
+  */
 
 
+  /*
   protected void rebuildTabLayouts(boolean error, boolean loading) {
     for (ContributionTab tab : tabList) {
       tab.rebuildLayout(error, loading);
     }
   }
+  */
 
 
   protected ContributionTab getTab(ContributionType contributionType) {
@@ -249,7 +237,7 @@ public class ManagerFrame {
   }
 
 
-  ContributionTab getActiveTab() {
-    return (ContributionTab) tabs.getPanel();
-  }
+//  ContributionTab getActiveTab() {
+//    return (ContributionTab) tabs.getPanel();
+//  }
 }

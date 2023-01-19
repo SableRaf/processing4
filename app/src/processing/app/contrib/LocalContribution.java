@@ -60,7 +60,7 @@ public abstract class LocalContribution extends Contribution {
     // required for contributed modes, but not for built-in core modes
     File propertiesFile = new File(folder, getTypeName() + ".properties");
     if (propertiesFile.exists()) {
-      properties = Util.readSettings(propertiesFile);
+      properties = Util.readSettings(propertiesFile, false);
 
       if (properties != null) {
         name = properties.get("name");
@@ -308,47 +308,130 @@ public abstract class LocalContribution extends Contribution {
                                     StatusPanel status,
                                     boolean updating) {
     // TODO: replace with SwingWorker [jv]
-    new Thread(() -> remove(base, pm, status, updating), "Contribution Uninstaller").start();
+    new Thread(() -> {
+      pm.startTask("Removing");
+
+      if (getType() == ContributionType.MODE) {
+        if (!removeMode(base, updating)) {
+          pm.cancel();
+          return;
+        }
+
+      } else if (getType() == ContributionType.TOOL) {
+        // menu will be rebuilt below with the refreshContribs() call
+        base.clearToolMenus();
+        ((ToolContribution) this).clearClassLoader();
+      }
+
+      boolean success;
+      boolean doBackup = Preferences.getBoolean("contribution.backup.on_remove");
+      if (doBackup) {
+        success = backup(true, status);
+      } else {
+        try {
+          success = Platform.deleteFile(getFolder());
+        } catch (IOException e) {
+          e.printStackTrace();
+          success = false;
+        }
+      }
+
+      if (success) {
+        try {
+          // TODO: run this in SwingWorker done() [jv]
+          EventQueue.invokeAndWait(() -> {
+            ContributionListing cl = ContributionListing.getInstance();
+
+            Contribution advertisedVersion =
+              cl.findAvailableContribution(LocalContribution.this);
+
+            if (advertisedVersion == null) {
+              cl.removeContribution(LocalContribution.this);
+            } else {
+              cl.replaceContribution(LocalContribution.this, advertisedVersion);
+            }
+            base.refreshContribs(LocalContribution.this.getType());
+            base.tallyUpdatesAvailable();
+          });
+        } catch (InterruptedException e) {
+          e.printStackTrace();
+        } catch (InvocationTargetException e) {
+          Throwable cause = e.getCause();
+          if (cause instanceof RuntimeException) {
+            throw (RuntimeException) cause;
+          } else {
+            cause.printStackTrace();
+          }
+        }
+
+      } else {
+        // There was a failure backing up the folder
+        if (!doBackup || backup(false, status)) {
+          if (setDeletionFlag(true)) {
+            try {
+              // TODO: run this in SwingWorker done() [jv]
+              EventQueue.invokeAndWait(() -> {
+                ContributionListing cl = ContributionListing.getInstance();
+                cl.replaceContribution(LocalContribution.this,
+                  LocalContribution.this);
+                base.refreshContribs(LocalContribution.this.getType());
+                base.tallyUpdatesAvailable();
+              });
+            } catch (InterruptedException e) {
+              e.printStackTrace();
+            } catch (InvocationTargetException e) {
+              Throwable cause = e.getCause();
+              if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
+              } else {
+                cause.printStackTrace();
+              }
+            }
+          }
+        } else {
+          status.setErrorMessage("Could not delete the contribution's files");
+        }
+      }
+      if (success) {
+        pm.finished();
+      } else {
+        pm.cancel();
+      }
+    }, "Contribution Uninstaller").start();
   }
 
 
-  private void remove(Base base, ContribProgress pm, StatusPanel status, boolean updating) {
-    pm.startTask("Removing");
-
-    boolean doBackup = Preferences.getBoolean("contribution.backup.on_remove");
-    if (getType() == ContributionType.MODE) {
-      //Set<Sketch> sketches = new HashSet<>();
-      List<Editor> editors = new ArrayList<>();  // might be nice to be in order
-      ModeContribution m = (ModeContribution) this;
-      for (Editor editor : base.getEditors()) {
-        if (editor.getMode().equals(m.getMode())) {
-          Sketch sketch = editor.getSketch();
-          if (sketch.isModified()) {
-            pm.cancel();
-            editor.toFront();
-            Messages.showMessage("Save Sketch",
-                                 "Please first save “" + sketch.getName() + "”.");
-            return;
-          } else {
-            // Keep track of open Editor windows using this Mode
-            //sketchMainList.add(sketch.getMainPath());
-            //sketches.add(sketch);
-            editors.add(editor);
-          }
+  private boolean removeMode(Base base, boolean updating) {
+    List<Editor> editors = new ArrayList<>();  // might be nice to be in order
+    ModeContribution m = (ModeContribution) this;
+    for (Editor editor : base.getEditors()) {
+      if (editor.getMode().equals(m.getMode())) {
+        Sketch sketch = editor.getSketch();
+        if (sketch.isModified()) {
+          editor.toFront();
+          Messages.showMessage("Save Sketch",
+            "Please first save “" + sketch.getName() + "”.");
+          return false;
+        } else {
+          // Keep track of open Editor windows using this Mode
+          //sketchMainList.add(sketch.getMainPath());
+          //sketches.add(sketch);
+          editors.add(editor);
         }
       }
-      // Close any open Editor windows that were using this Mode,
-      // and if updating, build up a list of paths for the sketches
-      // so that we can dispose of the Editor objects.
-      //StringList sketchPathList = new StringList();
-      for (Editor editor : editors) {
-        //sketchPathList.append(editor.getSketch().getMainPath());
-        StatusDetail.storeSketchPath(editor.getSketch().getMainPath());
-        base.handleClose(editor, true);
-      }
-      editors.clear();
-      m.clearClassLoader(base);
-      //StatusPanelDetail.storeSketches(sketchPathList);
+    }
+    // Close any open Editor windows that were using this Mode,
+    // and if updating, build up a list of paths for the sketches
+    // so that we can dispose of the Editor objects.
+    //StringList sketchPathList = new StringList();
+    for (Editor editor : editors) {
+      //sketchPathList.append(editor.getSketch().getMainPath());
+      StatusDetail.storeSketchPath(editor.getSketch().getMainPath());
+      base.handleClose(editor, true);
+    }
+    editors.clear();
+    m.clearClassLoader(base);
+    //StatusPanelDetail.storeSketches(sketchPathList);
 
       /*
         pm.cancel();
@@ -358,96 +441,16 @@ public abstract class LocalContribution extends Contribution {
         return;
       */
 
-      if (!updating) {
-        // Notify the Base in case this is the current Mode
-        base.modeRemoved(m.getMode());
-        // If that was the last Editor window, and we deleted its Mode,
-        // open a fresh window using the default Mode.
-        if (base.getEditors().size() == 0) {
-          base.handleNew();
-        }
+    if (!updating) {
+      // Notify the Base in case this is the current Mode
+      base.modeRemoved(m.getMode());
+      // If that was the last Editor window, and we deleted its Mode,
+      // open a fresh window using the default Mode.
+      if (base.getEditors().size() == 0) {
+        base.handleNew();
       }
     }
-
-    if (getType() == ContributionType.TOOL) {
-      // menu will be rebuilt below with the refreshContribs() call
-      base.clearToolMenus();
-      ((ToolContribution) this).clearClassLoader();
-    }
-
-    boolean success;
-    if (doBackup) {
-      success = backup(true, status);
-    } else {
-      try {
-        success = Platform.deleteFile(getFolder());
-      } catch (IOException e) {
-        e.printStackTrace();
-        success = false;
-      }
-    }
-
-    if (success) {
-      try {
-        // TODO: run this in SwingWorker done() [jv]
-        EventQueue.invokeAndWait(() -> {
-          ContributionListing cl = ContributionListing.getInstance();
-
-          Contribution advertisedVersion =
-            cl.getAvailableContribution(LocalContribution.this);
-
-          if (advertisedVersion == null) {
-            cl.removeContribution(LocalContribution.this);
-          } else {
-            cl.replaceContribution(LocalContribution.this, advertisedVersion);
-          }
-          base.refreshContribs(LocalContribution.this.getType());
-          base.setUpdatesAvailable(cl.countUpdates(base));
-        });
-      } catch (InterruptedException e) {
-        e.printStackTrace();
-      } catch (InvocationTargetException e) {
-        Throwable cause = e.getCause();
-        if (cause instanceof RuntimeException) {
-          throw (RuntimeException) cause;
-        } else {
-          cause.printStackTrace();
-        }
-      }
-
-    } else {
-      // There was a failure backing up the folder
-      if (!doBackup || backup(false, status)) {
-        if (setDeletionFlag(true)) {
-          try {
-            // TODO: run this in SwingWorker done() [jv]
-            EventQueue.invokeAndWait(() -> {
-              ContributionListing cl = ContributionListing.getInstance();
-              cl.replaceContribution(LocalContribution.this,
-                                                 LocalContribution.this);
-              base.refreshContribs(LocalContribution.this.getType());
-              base.setUpdatesAvailable(cl.countUpdates(base));
-            });
-          } catch (InterruptedException e) {
-            e.printStackTrace();
-          } catch (InvocationTargetException e) {
-            Throwable cause = e.getCause();
-            if (cause instanceof RuntimeException) {
-              throw (RuntimeException) cause;
-            } else {
-              cause.printStackTrace();
-            }
-          }
-        }
-      } else {
-        status.setErrorMessage("Could not delete the contribution's files");
-      }
-    }
-    if (success) {
-      pm.finished();
-    } else {
-      pm.cancel();
-    }
+    return true;
   }
 
 

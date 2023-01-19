@@ -26,6 +26,8 @@ package processing.mode.java;
 import java.awt.*;
 import java.awt.event.*;
 import java.io.*;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -90,6 +92,9 @@ public class JavaEditor extends Editor {
 
   /** P5 in decimal; if there are complaints, move to preferences.txt */
   static final int REFERENCE_PORT = 8053;
+  // weird to link to a specific location like this, but it's versioned, so:
+  static final String REFERENCE_URL =
+    "https://github.com/processing/processing-website/releases/download/2022-10-05-1459/reference.zip";
   Boolean useReferenceServer;
   WebServer referenceServer;
 
@@ -129,7 +134,7 @@ public class JavaEditor extends Editor {
     box.add(textAndError);
     */
 
-    preprocService = new PreprocService(this);
+    preprocService = new PreprocService(this.jmode, this.sketch); 
 
 //    long t5 = System.currentTimeMillis();
 
@@ -141,7 +146,7 @@ public class JavaEditor extends Editor {
       astViewer = new ASTViewer(this, preprocService);
     }
 
-    errorChecker = new ErrorChecker(this, preprocService);
+    errorChecker = new ErrorChecker(this::setProblemList, preprocService);
 
 //    long t7 = System.currentTimeMillis();
 
@@ -284,7 +289,6 @@ public class JavaEditor extends Editor {
     item.addActionListener(e -> {
       try {
         new Welcome(base);
-        //new Welcome(base, Preferences.getSketchbookPath().equals(Preferences.getOldSketchbookPath()));
       } catch (IOException ioe) {
         Messages.showWarning("Unwelcome Error",
                              "Please report this error to\n" +
@@ -294,13 +298,11 @@ public class JavaEditor extends Editor {
     menu.add(item);
 
     item = new JMenuItem(Language.text("menu.help.environment"));
-    //item.addActionListener(e -> showReference("environment/index.html"));
-    item.addActionListener(e -> Platform.openURL("https://processing.org/environment/"));
+    item.addActionListener(e -> showReference("../environment/index.html"));
     menu.add(item);
 
     item = new JMenuItem(Language.text("menu.help.reference"));
-    //item.addActionListener(e -> showReference("index.html"));
-    item.addActionListener(e -> Platform.openURL("https://processing.org/reference/"));
+    item.addActionListener(e -> showReference("index.html"));
     menu.add(item);
 
     item = Toolkit.newJMenuItemShift(Language.text("menu.help.find_in_reference"), 'F');
@@ -311,6 +313,15 @@ public class JavaEditor extends Editor {
         statusNotice(Language.text("editor.status.find_reference.select_word_first"));
       }
     });
+    menu.add(item);
+
+    // Not gonna use "update" since it's more about re-downloading:
+    // it doesn't make sense to "update" the reference because it's
+    // specific to a version of the software anyway. [fry 221125]
+//    item = new JMenuItem(isReferenceDownloaded() ?
+//      "menu.help.reference.update" : "menu.help.reference.download");
+    item = new JMenuItem(Language.text("menu.help.reference.download"));
+    item.addActionListener(e -> new Thread(this::downloadReference).start());
     menu.add(item);
 
     menu.addSeparator();
@@ -347,7 +358,7 @@ public class JavaEditor extends Editor {
     boolean coreToolMenuItemAdded;
     boolean contribToolMenuItemAdded;
 
-    List<ToolContribution> contribTools = base.getToolContribs();
+    List<ToolContribution> contribTools = base.getContribTools();
     // Adding this in in case a reference folder is added for MovieMaker, or in case
     // other core tools are introduced later
     coreToolMenuItemAdded = addToolReferencesToSubMenu(base.getCoreTools(), toolRefSubmenu);
@@ -783,7 +794,15 @@ public class JavaEditor extends Editor {
 
   public void showReference(String name) {
     if (useReferenceServer == null) {
+      // Because of this, it should be possible to create your own dist
+      // that includes the reference by simply adding it to modes/java.
       File referenceZip = new File(mode.getFolder(), "reference.zip");
+      if (!referenceZip.exists()) {
+        // For Java Mode (the default), check for a reference.zip in the root
+        // of the sketchbook folder. If other Modes subclass JavaEditor and
+        // don't override this function, it may cause a little trouble.
+        referenceZip = getOfflineReferenceFile();
+      }
       if (referenceZip.exists()) {
         try {
           referenceServer = new WebServer(referenceZip, REFERENCE_PORT);
@@ -811,6 +830,57 @@ public class JavaEditor extends Editor {
         // https://github.com/processing/processing4/issues/524
         Platform.openURL("https://processing.org/reference/" + name);
       }
+    }
+  }
+
+
+  private File getOfflineReferenceFile() {
+    return new File(Base.getSketchbookFolder(), "reference.zip");
+  }
+
+
+  /*
+  private boolean isReferenceDownloaded() {
+    return getOfflineReferenceFile().exists();
+  }
+  */
+
+
+  private void downloadReference() {
+    try {
+      URL source = new URL(REFERENCE_URL);
+      HttpURLConnection conn = (HttpURLConnection) source.openConnection();
+      HttpURLConnection.setFollowRedirects(true);
+      conn.setConnectTimeout(15 * 1000);
+      conn.setReadTimeout(60 * 1000);
+      conn.setRequestMethod("GET");
+      conn.connect();
+
+      int length = conn.getContentLength();
+//      float size = (length >> 10) / 1024f;
+      //float size = (length / 1000) / 1000f;
+//      String msg =
+//        "Downloading reference (" + PApplet.nf(size, 0, 1) + " MB)… ";
+      String mb = PApplet.nf((length >> 10) / 1024f, 0, 1);
+      if (mb.endsWith(".0")) {
+        mb = mb.substring(0, mb.length() - 2);  // don't show .0
+      }
+      ProgressMonitorInputStream input =
+        new ProgressMonitorInputStream(this,
+          "Downloading reference (" + mb + " MB)… ", conn.getInputStream());
+      input.getProgressMonitor().setMaximum(length);
+//      ProgressMonitor monitor = input.getProgressMonitor();
+//      monitor.setMaximum(length);
+      PApplet.saveStream(getOfflineReferenceFile(), input);
+      // reset the internal handling for the reference server
+      useReferenceServer = null;
+
+    } catch (InterruptedIOException iioe) {
+      // download canceled
+
+    } catch (IOException e) {
+      Messages.showWarning("Error downloading reference",
+        "Could not download the reference. Try again later.", e);
     }
   }
 
@@ -1168,7 +1238,7 @@ public class JavaEditor extends Editor {
    */
   private List<AvailableContribution> getNotInstalledAvailableLibs(List<String> importHeadersList) {
     Map<String, Contribution> importMap =
-      ContributionListing.getInstance().getLibrariesByImportHeader();
+      ContributionListing.getInstance().getLibraryImportMap();
     List<AvailableContribution> libList = new ArrayList<>();
     for (String importHeaders : importHeadersList) {
       int dot = importHeaders.lastIndexOf('.');

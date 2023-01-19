@@ -3,7 +3,7 @@
 /*
   Part of the Processing project - https://processing.org
 
-  Copyright (c) 2013-22 The Processing Foundation
+  Copyright (c) 2013-23 The Processing Foundation
   Copyright (c) 2011-12 Ben Fry and Casey Reas
 
   This program is free software; you can redistribute it and/or modify
@@ -45,7 +45,6 @@ import processing.app.laf.PdeButtonUI;
 import processing.app.laf.PdeProgressBarUI;
 import processing.app.ui.Theme;
 import processing.app.ui.Toolkit;
-import processing.app.Base;
 import processing.app.Platform;
 
 
@@ -80,17 +79,11 @@ class StatusPanel extends JPanel {
 
   public StatusPanel(final ContributionTab contributionTab) {
     this.contributionTab = contributionTab;
+    buildLayout();
+  }
 
-//    if (foundationIcon == null) {
-//      foundationIcon = Toolkit.getLibIconX("icons/foundation", 32);
-//      installIcon = Toolkit.getLibIconX("manager/install");
-//      updateIcon = Toolkit.getLibIconX("manager/update");
-//      removeIcon = Toolkit.getLibIconX("manager/remove");
-//      buttonFont = ManagerFrame.NORMAL_PLAIN;
-//    }
 
-    //setBackground(new Color(0xebebeb));
-
+  protected void buildLayout() {
     iconLabel = new JLabel();
     iconLabel.setHorizontalAlignment(SwingConstants.CENTER);
 
@@ -114,31 +107,11 @@ class StatusPanel extends JPanel {
       installButton.setEnabled(false);
       StatusDetail currentDetail =
         contributionTab.listPanel.getSelectedDetail();
-      currentDetail.install();
-      updateDetail(currentDetail);
+      currentDetail.installContrib(contributionTab.listPanel);
+      applyDetail(currentDetail);
     });
 
-    progressBar = new JProgressBar();
-    /*
-    progressBar = new JProgressBar() {
-      @Override
-      public void setBackground(Color c) {
-        new Exception("setting bg to " + c).printStackTrace(System.out);
-        super.setBackground(c);
-      }
-    };
-    */
-    progressBar.setStringPainted(true);
-    progressBar.setAlignmentX(Component.CENTER_ALIGNMENT);
-    //progressBar.setOpaque(true);
-
-    resetProgressBar();
-
-    final int high = progressBar.getPreferredSize().height;
-    Dimension dim = new Dimension(BUTTON_WIDTH, high);
-    progressBar.setPreferredSize(dim);
-    progressBar.setMaximumSize(dim);
-    progressBar.setMinimumSize(dim);
+    buildProgressBar();
 
     updateLabel = new JLabel(" ");
 //    updateLabel.setFont(buttonFont);
@@ -152,8 +125,8 @@ class StatusPanel extends JPanel {
       updateButton.setEnabled(false);
       StatusDetail currentDetail =
         contributionTab.listPanel.getSelectedDetail();
-      currentDetail.update();
-      updateDetail(currentDetail);
+      currentDetail.updateContrib(contributionTab.listPanel);
+      applyDetail(currentDetail);
     });
 
     //removeButton = Toolkit.createIconButton("Remove", removeIcon);
@@ -164,8 +137,8 @@ class StatusPanel extends JPanel {
       removeButton.setEnabled(false);
       StatusDetail currentPanel =
         contributionTab.listPanel.getSelectedDetail();
-      currentPanel.remove();
-      updateDetail(currentPanel);
+      currentPanel.removeContrib();
+      applyDetail(currentPanel);
     });
 
     layout = new GroupLayout(this);
@@ -209,8 +182,6 @@ class StatusPanel extends JPanel {
     layout.linkSize(SwingConstants.HORIZONTAL,
                     installButton, progressBar, updateButton, removeButton);
 
-    progressBar.setVisible(false);
-
     installButton.setEnabled(false);
     updateButton.setEnabled(false);
     removeButton.setEnabled(false);
@@ -219,7 +190,23 @@ class StatusPanel extends JPanel {
     // Makes the label take up space even though not visible
     layout.setHonorsVisibility(updateLabel, false);
 
-    validate();
+    //validate();  // necessary? [fry 230114]
+  }
+
+
+  protected void buildProgressBar() {
+    progressBar = new JProgressBar();
+    progressBar.setStringPainted(true);
+    progressBar.setAlignmentX(Component.CENTER_ALIGNMENT);
+    //progressBar.setOpaque(true);
+
+    resetProgressBar();
+
+    final int high = progressBar.getPreferredSize().height;
+    Dimension dim = new Dimension(BUTTON_WIDTH, high);
+    progressBar.setPreferredSize(dim);
+    progressBar.setMaximumSize(dim);
+    progressBar.setMinimumSize(dim);
   }
 
 
@@ -251,13 +238,6 @@ class StatusPanel extends JPanel {
       "}";
 
     updateLabel.setForeground(Theme.getColor("manager.panel.text.color"));
-
-    // I'm not circuitous, *you're* circuitous.
-    StatusDetail detail = contributionTab.listPanel.getSelectedDetail();
-    if (detail != null) {
-      updateDetail(detail);
-    }
-
     foundationIcon = Toolkit.renderIcon("manager/foundation", Theme.get("manager.panel.foundation.color"), 32);
 
     updateButtonTheme(installButton, "install");
@@ -265,8 +245,15 @@ class StatusPanel extends JPanel {
     updateButtonTheme(removeButton, "remove");
 
     StatusDetail currentDetail =
+      // I'm not circuitous, *you're* circuitous.
       contributionTab.listPanel.getSelectedDetail();
     if (currentDetail != null) {
+      applyDetail(currentDetail);
+      // TODO This only updates the scroll bar, and only the current selection.
+      //      So if the theme is updated with the manager opened, selecting
+      //      another contrib and installing/updating/removing it will result
+      //      in a progress bar being used that's not the correct theme.
+      //      But the progress bars need to be removed anyway. [fry 230114]
       currentDetail.updateTheme();
     }
 
@@ -305,7 +292,7 @@ class StatusPanel extends JPanel {
   }
 
 
-  static private void updateButtonTheme(JButton button, String name) {
+  static protected void updateButtonTheme(JButton button, String name) {
     if (button.getUI() instanceof PdeButtonUI) {
       ((PdeButtonUI) button.getUI()).updateTheme();
     } else {
@@ -405,7 +392,7 @@ class StatusPanel extends JPanel {
   }
 
 
-  void updateDetail(StatusDetail detail) {
+  protected void applyDetail(StatusDetail detail) {
 //    System.out.println("rebuilding status detail for " + detail.getContrib().name);
 //    new Exception("rebuilding status detail for " + detail.getContrib().name).printStackTrace(System.out);
     Contribution contrib = detail.getContrib();
@@ -416,8 +403,7 @@ class StatusPanel extends JPanel {
 
     ContributionListing listing = ContributionListing.getInstance();
 
-    updateButton.setEnabled(listing.isDownloaded() &&
-                            (listing.hasUpdates(contrib) &&
+    updateButton.setEnabled((listing.hasUpdates(contrib) &&
                              !contrib.isUpdateFlagged()) &&
                             !detail.updateInProgress);
 
@@ -425,11 +411,10 @@ class StatusPanel extends JPanel {
     String currentVersion = contrib.getPrettyVersion();
 
     installButton.setEnabled(!contrib.isInstalled() &&
-                             listing.isDownloaded() &&
-                             contrib.isCompatible(Base.getRevision()) &&
+                             contrib.isCompatible() &&
                              !detail.installInProgress);
 
-    if (contrib.isCompatible(Base.getRevision())) {
+    if (contrib.isCompatible()) {
       if (installButton.isEnabled()) {
         if (latestVersion != null) {
           updateLabel.setText(latestVersion + " available");

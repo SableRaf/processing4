@@ -1,3 +1,23 @@
+/* -*- mode: java; c-basic-offset: 2; indent-tabs-mode: nil -*- */
+
+/*
+Part of the Processing project - http://processing.org
+Copyright (c) 2012-23 The Processing Foundation
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License version 2
+as published by the Free Software Foundation.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software Foundation, Inc.
+51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+*/
+
 package processing.mode.java;
 
 import java.awt.EventQueue;
@@ -28,7 +48,7 @@ import processing.app.Language;
 import processing.app.Problem;
 
 
-class ErrorChecker {
+public class ErrorChecker {
   // Delay delivering error check result after last sketch change
   // https://github.com/processing/processing/issues/2677
   private final static long DELAY_BEFORE_UPDATE = 650;
@@ -41,11 +61,11 @@ class ErrorChecker {
   private final Consumer<PreprocSketch> errorHandlerListener =
     this::handleSketchProblems;
 
-  final private JavaEditor editor;
+  final private Consumer<List<Problem>> editor;
   final private PreprocService pps;
 
 
-  public ErrorChecker(JavaEditor editor, PreprocService pps) {
+  public ErrorChecker(Consumer<List<Problem>> editor, PreprocService pps) {
     this.editor = editor;
     this.pps = pps;
 
@@ -69,7 +89,7 @@ class ErrorChecker {
         pps.registerListener(errorHandlerListener);
       } else {
         pps.unregisterListener(errorHandlerListener);
-        editor.setProblemList(Collections.emptyList());
+        editor.accept(Collections.emptyList());
         nextUiUpdate = 0;
       }
     }
@@ -84,7 +104,7 @@ class ErrorChecker {
 
 
   private void handleSketchProblems(PreprocSketch ps) {
-    Map<String, String[]> suggCache =
+    Map<String, String[]> suggestCache =
       JavaMode.importSuggestEnabled ? new HashMap<>() : Collections.emptyMap();
 
     List<IProblem> iproblems;
@@ -117,7 +137,7 @@ class ErrorChecker {
           if (p != null && JavaMode.importSuggestEnabled && isUndefinedTypeProblem(iproblem)) {
             ClassPath cp = searchClassPath.updateAndGet(prev -> prev != null ?
                 prev : new ClassPathFactory().createFromPaths(ps.searchClassPathArray));
-            String[] s = suggCache.computeIfAbsent(iproblem.getArguments()[0],
+            String[] s = suggestCache.computeIfAbsent(iproblem.getArguments()[0],
                                                    name -> getImportSuggestions(cp, name));
             p.setImportSuggestions(s);
           }
@@ -136,7 +156,7 @@ class ErrorChecker {
     long delay = nextUiUpdate - System.currentTimeMillis();
     Runnable uiUpdater = () -> {
       if (nextUiUpdate > 0 && System.currentTimeMillis() >= nextUiUpdate) {
-        EventQueue.invokeLater(() -> editor.setProblemList(problems));
+        EventQueue.invokeLater(() -> editor.accept(problems));
       }
     };
     scheduledUiUpdate =
@@ -243,11 +263,11 @@ class ErrorChecker {
 
     for (IProblem iproblem : iproblems) {
       switch (iproblem.getID()) {
-        case IProblem.ParsingErrorDeleteToken:
-        case IProblem.ParsingErrorDeleteTokens:
-        case IProblem.ParsingErrorInvalidToken:
-        case IProblem.ParsingErrorReplaceTokens:
-        case IProblem.UnterminatedString:
+        case IProblem.ParsingErrorDeleteToken,
+             IProblem.ParsingErrorDeleteTokens,
+             IProblem.ParsingErrorInvalidToken,
+             IProblem.ParsingErrorReplaceTokens,
+             IProblem.UnterminatedString -> {
           SketchInterval in = ps.mapJavaToSketch(iproblem);
           if (in == SketchInterval.BEFORE_START) continue;
           String badCode = ps.getPdeCode(in);
@@ -271,6 +291,7 @@ class ErrorChecker {
               problems2.add(p);
             }
           }
+        }
       }
     }
     problems.addAll(problems2);

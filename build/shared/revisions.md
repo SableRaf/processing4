@@ -1,3 +1,174 @@
+# Processing 4.1.2
+
+*Revision 1290 – 16 January 2023*
+
+Happy [Martin Luther King Jr. day](https://en.wikipedia.org/wiki/Martin_Luther_King_Jr._Day)!
+
+
+## Contributions Manager
+
+The majority of the work for this release went into cleaning up and fixing the Contributions Manager. (What you see when importing Libraries, managing Modes, etc.) Please, please, please help us out and give it a lot of testing. This is old, messy, and important code that is easy to break in major ways. If you have trouble with it, please file an issue!
+
+* The “Manage Modes…” menu item was opening an empty window. [#613](https://github.com/processing/processing4/issues/613)
+
+* Fix `Cannot invoke "javax.swing.JProgressBar.setVisible(boolean)" because "this.progressBar" is null` error when using Update All. [#618](https://github.com/processing/processing4/issues/618)
+
+* Libraries from the Foundation (i.e. Video, Sound, and JavaFX) will now be reported properly on the [stats page](https://download.processing.org/stats/).
+
+* Updated the [Wiki pages](https://github.com/processing/processing4/wiki#contributions) about Libraries, Modes, Tools, and Examples for Processing 4. These pages were copied over from the Processing 3 repository, but needed some cleaning. Still more work to do here, but it's a start.
+
+* Implemented per-line indicators for download/install status. Eventually these will replace the progress bar in the bottom panel.
+
+* Removed an old workaround for a `NullPointerException` while making selections. If it reappears, please file a new issue. [#3667](https://github.com/processing/processing/issues/3667)
+
+
+## @SamPottinger saves us again
+
+* “Cannot find a class or type named ‘PApplet’” error [#626](https://github.com/processing/processing4/issues/626), [#635](https://github.com/processing/processing4/pull/635)
+
+* Cannot use `@Override` and `@Deprecated` in static mode [#619](https://github.com/processing/processing4/issues/619), [#622](https://github.com/processing/processing4/pull/622)
+
+* `color` in imports shows up as an error in the editor (even though the code still runs) [#521](https://github.com/processing/processing4/issues/521), [#636](https://github.com/processing/processing4/pull/636)
+
+* Sketch folders with spaces or hyphens showing errors in the editor window (even though the code still runs) [#610](https://github.com/processing/processing4/issues/610), [#637](https://github.com/processing/processing4/pull/637)
+
+
+## Other Bug Fixes
+
+* Help Menu sometimes disabled on macOS. This is a Java bug, but it's been closed as “cannot reproduce,” so I managed to find a workaround. [#4353](https://github.com/processing/processing/issues/4353#issuecomment-237715947), [#617](https://github.com/processing/processing4/issues/617), [#638](https://github.com/processing/processing4/issues/638)
+
+* Fixed ClassCastException with `copy()` and `PGraphicsJava2D`. [#624](https://github.com/processing/processing4/issues/624)
+
+
+## Additions? Why Not.
+
+* The shortcuts for Find Next and Find Previous (i.e. ctrl-G and ctrl-shift-G on Windows/Linux) now work inside the Find/Replace window.
+
+* Show a warning when calling `clear()` on the primary drawing surface. [#627](https://github.com/processing/processing4/issues/627)
+
+
+# Processing 4.1.1
+
+*Revision 1289 – 28 November 2022*
+
+See the release notes for [4.1](https://github.com/processing/processing4/releases/tag/processing-1288-4.1) and [4.0.2](https://github.com/processing/processing4/releases/tag/processing-1287-4.0.2) for major updates since 4.0.1 was released in August.
+
+This release adds a single file for Language Server support that was missing in the 4.1 release from a few hours ago.
+
+And if you'd like to try out the Language Server with Visual Studio Code, you can give [this project](https://github.com/kgtkr/processing-language-server-vscode) a try.
+
+
+# Processing 4.1
+
+*Revision 1288 – 28 November 2022*
+
+Compared with the 4.0.2 release which was focused on stability, this 4.1 release is focused on ~~instability~~ adding a couple new features. They'll need more testing, but hopefully you'll find them useful.
+
+
+## what makes this 4.1 instead of 4.0.3
+
+* This release adds initial support for [Language Server Protocol](https://en.wikipedia.org/wiki/Language_Server_Protocol), which means we will soon be able to integrate the compile/run process with other editors like Visual Studio Code. There is still a lot of work to be done here (this code is probably more “alpha” quality) but it's a good step forward. To use it, we'll first need an LSP “client,” which can be a community contribution so keep an eye out for that in the coming weeks and months. Thanks to @kgtkr for the LSP code here, it's a huge help. [#117](https://github.com/processing/processing4/issues/117)
+
+* Support has been added for extended language tags, which makes available a Traditional Chinese (`zh_TW`) translation in addition to the previously available Simplified Chinese translation (originally `zh`, now renamed to `zh_CN`). You can see the full list of supported language tags [here](https://www.oracle.com/java/technologies/javase/jdk17-suported-locales.html#modules). We will keep the existing two-digit tags in place for now, and update them as needed when new language translations are added. Read more on the [Translations](https://github.com/processing/processing4/wiki/Translations) page on the Wiki. Thanks to @jsyeh for the `zh_TW` translation. [#600](https://github.com/processing/processing4/issues/600)
+
+* Since the redesign of Processing.org, the offline reference is too large to include the download. In this release, a “Download Offline Reference” item was added to the Help Menu, for people who need an offline copy. It creates a file called `reference.zip` in the sketchbook. If that file is present, then the Help menu links and Find in Reference will use that copy of the reference. If it is not present, online URLs will be used. You can also manually copy the `reference.zip` file from sketchbook to sketchbook. Put `reference.zip` in the root of your sketchbook and restart Processing so that it picks up the new file. For instance, in a class situation, you might put the file on a shared server and tell people where to find it. Read more on the [Offline Reference](https://github.com/processing/processing4/wiki/Offline-Reference) page on the Wiki. [#524](https://github.com/processing/processing4/issues/524), [#213](https://github.com/processing/processing-website/issues/213)
+
+
+## contributed fixes
+
+* `size(863,863/2)` inside `setup()` function (fix from @sampottinger) [#602](https://github.com/processing/processing4/issues/602), [#609](https://github.com/processing/processing4/pull/609)
+
+* Pre-processor was inserting extra spaces (another from @sampottinger) [#607](https://github.com/processing/processing4/issues/607), [#609](https://github.com/processing/processing4/pull/609)
+
+* Fix the JavaDoc for mousePressed variable from @SableRaf. [#605](https://github.com/processing/processing4/pull/605)
+
+
+## other updates
+
+* In some cases, the Theme was not being saved after Processing was restarted. [#565](https://github.com/processing/processing4/issues/565)
+
+* A few updates and clarifications in the `size()` reference.
+
+* The Java version has been bumped from 17.0.4 to 17.0.5.
+
+
+# Processing 4.0.2
+
+*Revision 1287 – 24 November 2022*
+
+🦃 Happy Thanksgiving! 🦃
+
+Fixing more regressions and other steps backward found since the 4.0 release. Enjoy!
+
+
+## the big ones
+
+* OpenGL apps now work with macOS Ventura, once again thanks to @jaegonlee. [#544](https://github.com/processing/processing4/issues/544)
+
+* Library version number parsing wasn't ignoring comments properly, so libraries that followed the template closely were showing `The version number for “…” is not a number`. [#586](https://github.com/processing/processing4/issues/586), [#553](https://github.com/processing/processing4/issues/553)
+
+* The Updates tab of the Contribution Manager was throwing error messages about `this.progressBar`. [#567](https://github.com/processing/processing4/issues/567)
+
+* `fullScreen()` with `pixelDensity(2)` was broken with the default renderer. On startup, the sketch would report `Display -1 does not exist, returning 1 for displayDensity(-1)`. [#487](https://github.com/processing/processing4/issues/487)
+
+* JSSC update for M1/M2 from @sampottinger [#525](https://github.com/processing/processing4/issues/525), [#577](https://github.com/processing/processing4/pull/577)
+
+
+## the li'l and medium ones
+
+* After creating 26 sketches, the “take a break” message still showed up after restarting Processing. [#582](https://github.com/processing/processing4/issues/582)
+
+* With multiple users sharing a machine, Processing would not work properly for the second user due to a problem with the temporary directory. [#549](https://github.com/processing/processing4/issues/549)
+
+* Added explanation for how to fix Processing when a user disallows access to the Documents folder on macOS. [#581](https://github.com/processing/processing4/issues/581)
+
+* Fixed an infinite loop that could be caused by running out of options for a sketch naming scheme.
+
+* When calling `random()` on a list (now `choice()`) with no elements, it would throw a weird `Exception`. Now it throws a more descriptive exception.
+
+
+## need some help here
+
+Contributions from the community!
+
+* Loading SVG file was giving `Illegal base64 character 20 encoding error`. Fixed thanks to @jaegonlee and @vepo. [#592](https://github.com/processing/processing4/issues/592), [#599](https://github.com/processing/processing4/pull/599)
+
+* Updated Catalan translation thanks to @trikaphundo. [#550](https://github.com/processing/processing4/issues/550), [#554](https://github.com/processing/processing4/pull/554)
+
+* Updates to the Spanish translation, also from @trikaphundo! [#552](https://github.com/processing/processing4/issues/552), [#574](https://github.com/processing/processing4/pull/574)
+
+* A couple fixes for the Ukranian language strings from @rzats. [#585](https://github.com/processing/processing4/pull/585)
+
+* @LesleyWagner fixed the vertical placement of top elements in the Manager window. [#520](https://github.com/processing/processing4/issues/520), [#539](https://github.com/processing/processing4/pull/539)
+
+* Preprocessor fix from @sampottinger for function/variable "does not exist" errors reported when defining a class without `setup()` or `draw()`. [#579](https://github.com/processing/processing4/issues/579), [#597](https://github.com/processing/processing4/pull/597)
+
+
+## steps forward
+
+* Added a `choice()` method to the `XxxxList` classes, which returns a random value from the list. Similarly `removeChoice()` removes a random element from the list and returns the value.
+
+* Also added a `choice()` method that returns random integers. So `int value = choice(10)` is a shorthand way of saying `int value = (int) random(10)`
+
+* Removed the `choice()` (formerly `random()`) method from the `XxxxList` classes that took a `PApplet` object for its random number seed/generator. Just feels like overkill at this point.
+
+
+## internal changes
+
+* Using more Java 17 syntax in the code. No plans to really scrub everything to change the syntax over, just a matter of cleaning things up as we go.
+
+* Fixed a potential casting problem with `Platform` and `DefaultPlatform`. Should have been unreachable, but fixed anyway.
+
+* Brought back `getCodeIndex()` for GUI Builder Tool… then removed it again. [#545](https://github.com/processing/processing4/issues/545), [#596](https://github.com/processing/processing4/issues/596)
+
+
+## me talking on the wiki
+
+* Added a [Translations](https://github.com/processing/processing4/wiki/Translations) page to the 4.x wiki, which is update to the [Localization](https://github.com/processing/processing/wiki/Localization) page from the 3.x repository.
+
+* Posted [an explanation](https://github.com/processing/processing4/wiki/Naming-Sketches) of how to create a `naming.json` file so you can set up your own sketch naming schemes.
+
+
 # Processing 4.0.1
 
 *Revision 1286 – 9 August 2022*

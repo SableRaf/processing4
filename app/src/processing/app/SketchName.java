@@ -31,10 +31,17 @@ public class SketchName {
    */
   static File nextFolder(File parentDir) {
     String approach = Preferences.get("sketch.name.approach");
-    if (!CLASSIC.equals(approach)) {
-      File folder = wordsFolder(parentDir, approach);
-      if (folder != null) {
-        return folder;
+    if ((approach != null) && !CLASSIC.equals(approach)) {
+      WordList wl = getWordLists().get(approach);
+      if (wl != null) {  // just in case the naming scheme no longer available
+        File folder = wl.wordsFolder(parentDir);
+        if (folder == null) {
+          Messages.showWarning("Out of Options", """
+            All possible naming combinations have been used.
+            Use “Preferences” to choose a different naming system,
+            or restart Processing.""");
+        }
+        return folder;  // null or otherwise
       }
     }
     // classic was selected, or fallback due to an error
@@ -77,7 +84,8 @@ public class SketchName {
           breakTime = true;
         } else {
           Messages.showWarning("Sunshine",
-                  "No really, time for some fresh air for you.", null);
+                  "No really, time for some fresh air for you.\n" +
+                  "(At a minimum, you'll need to restart Processing.)", null);
         }
         return null;
       }
@@ -100,6 +108,7 @@ public class SketchName {
     String notes;
     StringList prefixes;
     StringList suffixes;
+    StringList exhaustive;
 
     WordList(JSONObject source) {
       name = source.getString("name");
@@ -109,22 +118,72 @@ public class SketchName {
     }
 
     String getPair() {
-      return (prefixes.random() + " " + suffixes.random()).replace(' ', '_');
+      return (prefixes.choice() + " " + suffixes.choice()).replace(' ', '_');
     }
-  }
 
+//    int getComboCount() {
+//      return prefixes.size() * suffixes.size();
+//    }
 
-  static File wordsFolder(File parentDir, String setName) {
-    WordList wl = getWordLists().get(setName);
-    File outgoing = null;
-    if (wl != null) {
+    /**
+     * For name sets that are especially small, it may be possible
+     * to run out of name pairs. This first builds a (shuffled) list
+     * of all remaining name possibilities and then returns entries
+     * from that list until it has been exhausted.
+     */
+    File wordsFolderExhaust(File parentDir) {
+      // if it doesn't exist already, create a list of all (unused) possibilities
+      if (exhaustive == null) {
+        exhaustive = new StringList();
+        for (String prefix : prefixes) {
+          for (String suffix : suffixes) {
+            String pair = (prefix + " " + suffix).replace(' ', '_');
+            String name = Sketch.sanitizeName(pair);
+            File folder = new File(parentDir, name);
+            if (!folder.exists()) {
+              exhaustive.append(name);
+            }
+          }
+        }
+        exhaustive.shuffle();
+      }
+      // keep trying until we find something or the list is empty
+      while (true) {
+        if (exhaustive.size() == 0) {
+          return null;
+        }
+        String name = exhaustive.removeChoice();
+        if (name == null) {
+          return null;  // no more choices available
+        }
+        File outgoing = new File(parentDir, name);
+        if (!outgoing.exists()) {
+          return outgoing;
+        }
+      }
+    }
+
+    File wordsFolder(File parentDir) {
+      if (exhaustive != null) {
+        return wordsFolderExhaust(parentDir);
+      }
+      // Still may be other possibilities after this, but if we hit
+      // this many attempts, we've pretty much exhausted the list.
+      final int maxAttempts = prefixes.size() * suffixes.size();
+      int attempts = 0;
+      File outgoing;
       do {
         // Clean up the name in case a user-supplied word list breaks the rules
-        String name = Sketch.sanitizeName(wl.getPair());
+        String name = Sketch.sanitizeName(getPair());
         outgoing = new File(parentDir, name);
+        attempts++;
+        if (attempts == maxAttempts) {
+          //return null;  // avoid infinite loop
+          return wordsFolderExhaust(parentDir);
+        }
       } while (outgoing.exists());
+      return outgoing;
     }
-    return outgoing;
   }
 
 

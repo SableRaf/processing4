@@ -3,7 +3,7 @@
 /*
   Part of the Processing project - http://processing.org
 
-  Copyright (c) 2013-19 The Processing Foundation
+  Copyright (c) 2013-23 The Processing Foundation
   Copyright (c) 2004-12 Ben Fry and Casey Reas
   Copyright (c) 2001-04 Massachusetts Institute of Technology
 
@@ -7431,7 +7431,11 @@ public class PGraphics extends PImage implements PConstants {
    * @webBrief Clears the pixels within a buffer
    */
   public void clear() {
-    background(0, 0, 0, 0);
+    if (primaryGraphics) {
+      showWarning("clear() can only be used with createGraphics()");
+    } else {
+      background(0, 0, 0, 0);
+    }
   }
 
 

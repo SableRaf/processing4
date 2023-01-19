@@ -3,7 +3,7 @@
 /*
   Part of the Processing project - http://processing.org
 
-  Copyright (c) 2013-16 The Processing Foundation
+  Copyright (c) 2013-23 The Processing Foundation
   Copyright (c) 2011-12 Ben Fry and Casey Reas
 
   This program is free software; you can redistribute it and/or modify
@@ -22,17 +22,19 @@
 package processing.app.contrib;
 
 import java.awt.EventQueue;
-import java.io.*;
+import java.io.File;
 import java.lang.reflect.InvocationTargetException;
 import java.net.*;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
 import processing.app.Base;
-import processing.app.Library;
+import processing.app.UpdateCheck;
 import processing.app.Util;
 import processing.core.PApplet;
 import processing.data.StringDict;
+import processing.data.StringList;
 
 
 public class ContributionListing {
@@ -46,29 +48,29 @@ public class ContributionListing {
   static final String LOCAL_FILENAME = "contribs.txt";
 
   /** Location of the listing file on disk, will be read and written. */
-  File listingFile;
+  private File listingFile;
+  private boolean listDownloaded;
+//  boolean listDownloadFailed;
+  final private ReentrantLock downloadingLock = new ReentrantLock();
+
+  final Set<AvailableContribution> availableContribs;
+  final private Map<String, Contribution> importToLibrary;
+  final private Set<Contribution> allContribs;
 
   Set<ListPanel> listPanels;
-  final List<AvailableContribution> advertisedContributions;
-  Map<String, Contribution> librariesByImportHeader;
-  Set<Contribution> allContributions;
-  boolean listDownloaded;
-//  boolean listDownloadFailed;
-  ReentrantLock downloadingListingLock;
 
 
   private ContributionListing() {
     listPanels = new HashSet<>();
-    advertisedContributions = new ArrayList<>();
-    librariesByImportHeader = new HashMap<>();
-    allContributions = new LinkedHashSet<>();
-    downloadingListingLock = new ReentrantLock();
+    availableContribs = new HashSet<>();
+    importToLibrary = new HashMap<>();
+    allContribs = ConcurrentHashMap.newKeySet();
 
     listingFile = Base.getSettingsFile(LOCAL_FILENAME);
     if (listingFile.exists()) {
       // On the EDT already, but do this later on the EDT so that the
-      // constructor can finish more efficiently for getInstance().
-      EventQueue.invokeLater(() -> setAdvertisedList(listingFile));
+      // constructor can finish more efficiently inside getInstance().
+      EventQueue.invokeLater(() -> loadAvailableList(listingFile));
     }
   }
 
@@ -85,50 +87,63 @@ public class ContributionListing {
   }
 
 
-  private void setAdvertisedList(File file) {
-    listingFile = file;
-
-    advertisedContributions.clear();
-    advertisedContributions.addAll(parseContribList(listingFile));
-    for (Contribution contribution : advertisedContributions) {
-      addContribution(contribution);
-    }
+  static protected Set<Contribution> getAllContribs() {
+    return getInstance().allContribs;
   }
 
 
   /**
-   * Adds the installed libraries to the listing of libraries, replacing
-   * any pre-existing libraries by the same name as one in the list.
+   * Update the list of contribs with entries for what is installed.
+   * If it matches an entry from contribs.txt, replace that entry.
+   * If not, add it to the list as a new contrib.
    */
-  protected void updateInstalledList(List<Contribution> installed) {
+  static protected void updateInstalled(Set<Contribution> installed) {
+    ContributionListing listing = getInstance();
+
     for (Contribution contribution : installed) {
-      Contribution existingContribution = getContribution(contribution);
+      Contribution existingContribution = listing.findContribution(contribution);
       if (existingContribution != null) {
         if (existingContribution != contribution) {
           // don't replace contrib with itself
-          replaceContribution(existingContribution, contribution);
+          listing.replaceContribution(existingContribution, contribution);
         }
       } else {
-        addContribution(contribution);
+        listing.addContribution(contribution);
       }
     }
   }
 
 
-  protected void replaceContribution(Contribution oldLib, Contribution newLib) {
-    if (oldLib != null && newLib != null) {
-      if (oldLib.getImports() != null) {
-        for (String importName : oldLib.getImports()) {
-          if (getLibrariesByImportHeader().containsKey(importName)) {
-            getLibrariesByImportHeader().put(importName, newLib);
-          }
+  private Contribution findContribution(Contribution contribution) {
+    for (Contribution c : allContribs) {
+      if (c.getName().equals(contribution.getName()) &&
+        c.getType() == contribution.getType()) {
+        return c;
+      }
+    }
+    return null;
+  }
+
+
+  // This could just be a remove followed by an add, but contributionChanged()
+  // is a little weird, so that should be cleaned up first [fry 230114]
+  protected void replaceContribution(Contribution oldContrib, Contribution newContrib) {
+    if (oldContrib != null && newContrib != null) {
+      if (oldContrib.getImports() != null) {
+        for (String importName : oldContrib.getImports()) {
+          importToLibrary.remove(importName);
         }
       }
-      allContributions.remove(oldLib);
-      allContributions.add(newLib);
+      if (newContrib.getImports() != null) {
+        for (String importName : newContrib.getImports()) {
+          importToLibrary.put(importName, newContrib);
+        }
+      }
+      allContribs.remove(oldContrib);
+      allContribs.add(newContrib);
 
       for (ListPanel listener : listPanels) {
-        listener.contributionChanged(oldLib, newLib);
+        listener.contributionChanged(oldContrib, newContrib);
       }
     }
   }
@@ -137,10 +152,10 @@ public class ContributionListing {
   private void addContribution(Contribution contribution) {
     if (contribution.getImports() != null) {
       for (String importName : contribution.getImports()) {
-        getLibrariesByImportHeader().put(importName, contribution);
+        getLibraryImportMap().put(importName, contribution);
       }
     }
-    allContributions.add(contribution);
+    allContribs.add(contribution);
 
     for (ListPanel listener : listPanels) {
       listener.contributionAdded(contribution);
@@ -151,10 +166,10 @@ public class ContributionListing {
   protected void removeContribution(Contribution contribution) {
     if (contribution.getImports() != null) {
       for (String importName : contribution.getImports()) {
-        getLibrariesByImportHeader().remove(importName);
+        getLibraryImportMap().remove(importName);
       }
     }
-    allContributions.remove(contribution);
+    allContribs.remove(contribution);
 
     for (ListPanel listener : listPanels) {
       listener.contributionRemoved(contribution);
@@ -162,22 +177,15 @@ public class ContributionListing {
   }
 
 
-  private Contribution getContribution(Contribution contribution) {
-    for (Contribution c : allContributions) {
-      if (c.getName().equals(contribution.getName()) &&
-          c.getType() == contribution.getType()) {
-        return c;
-      }
-    }
-    return null;
-  }
-
-
-  protected AvailableContribution getAvailableContribution(Contribution info) {
-    synchronized (advertisedContributions) {
-      for (AvailableContribution advertised : advertisedContributions) {
-        if (advertised.getType() == info.getType() &&
-            advertised.getName().equals(info.getName())) {
+  /**
+   * Given a contribution that's already installed, find it in the list
+   * of available contributions to see if there is an update available.
+   */
+  protected AvailableContribution findAvailableContribution(Contribution contrib) {
+    synchronized (availableContribs) {
+      for (AvailableContribution advertised : availableContribs) {
+        if (advertised.getType() == contrib.getType() &&
+            advertised.getName().equals(contrib.getName())) {
           return advertised;
         }
       }
@@ -198,10 +206,9 @@ public class ContributionListing {
    */
   public void downloadAvailableList(final Base base,
                                     final ContribProgress progress) {
-
     // TODO: replace with SwingWorker [jv]
     new Thread(() -> {
-      downloadingListingLock.lock();
+      downloadingLock.lock();
 
       try {
         URL url = new URL(LISTING_URL);
@@ -211,10 +218,11 @@ public class ContributionListing {
             System.err.println("Could not set " + tempContribFile + " writable");
           }
         }
-        ContributionManager.download(url, base.getInstalledContribsInfo(),
+        ContributionManager.download(url, makeContribsBlob(base),
                                      tempContribFile, progress);
-        if (!progress.isCanceled() && !progress.isException()) {
+        if (progress.notCanceled() && !progress.isException()) {
           if (listingFile.exists()) {
+            //noinspection ResultOfMethodCallIgnored
             listingFile.delete();  // may silently fail, but below may still work
           }
           if (tempContribFile.renameTo(listingFile)) {
@@ -223,8 +231,8 @@ public class ContributionListing {
             try {
               // TODO: run this in SwingWorker done() [jv]
               EventQueue.invokeAndWait(() -> {
-                setAdvertisedList(listingFile);
-                base.setUpdatesAvailable(countUpdates(base));
+                loadAvailableList(listingFile);
+                base.tallyUpdatesAvailable();
               });
             } catch (InterruptedException e) {
               e.printStackTrace();
@@ -245,36 +253,71 @@ public class ContributionListing {
         progress.setException(e);
         progress.finished();
       } finally {
-        downloadingListingLock.unlock();
+        downloadingLock.unlock();
       }
     }, "Contribution List Downloader").start();
   }
 
 
-  protected boolean hasUpdates(Contribution contrib) {
-    if (!contrib.isInstalled()) {
-      return false;
-    }
-    Contribution advertised = getAvailableContribution(contrib);
-    if (advertised == null) {
-      return false;
-    }
-    return (advertised.getVersion() > contrib.getVersion() &&
-            advertised.isCompatible(Base.getRevision()));
-  }
-
-
-  protected String getLatestPrettyVersion(Contribution contrib) {
-    Contribution newestContrib = getAvailableContribution(contrib);
-    if (newestContrib == null) {
-      return null;
-    }
-    return newestContrib.getPrettyVersion();
-  }
-
-
   protected boolean isDownloaded() {
     return listDownloaded;
+  }
+
+
+  // Thread: EDT
+  private void loadAvailableList(File file) {
+    listingFile = file;
+
+    availableContribs.clear();
+    availableContribs.addAll(parseContribList(listingFile));
+    for (Contribution contribution : availableContribs) {
+      addContribution(contribution);
+    }
+  }
+
+
+  /**
+   * Bundles information about what contribs are installed, so that they can
+   * be reported at the <a href="https://download.processing.org/stats/">stats</a> link.
+   * (Eventually this may also be used to show relative popularity of contribs.)
+   * Read more about it <a href="https://github.com/processing/processing4/wiki/FAQ#checking-for-updates-or-why-is-processing-connecting-to-the-network">in the FAQ</a>.</a>
+   */
+  private byte[] makeContribsBlob(Base base) {
+    Set<Contribution> contribs = base.getInstalledContribs();
+    StringList entries = new StringList();
+    for (Contribution c : contribs) {
+      String entry = c.getTypeName() + "=" +
+        PApplet.urlEncode(String.format("name=%s\nurl=%s\nrevision=%d\nversion=%s",
+          c.getName(), c.getUrl(),
+          c.getVersion(), c.getBenignVersion()));
+      entries.append(entry);
+    }
+    String joined =
+      "id=" + UpdateCheck.getUpdateID() + "&" + entries.join("&");
+    return joined.getBytes();
+  }
+
+
+  public boolean hasUpdates(Contribution contrib) {
+    if (contrib.isInstalled()) {
+      Contribution available = findAvailableContribution(contrib);
+      return available != null &&
+        available.getVersion() > contrib.getVersion() &&
+        available.isCompatible();
+    }
+    return false;
+  }
+
+
+  /**
+   * Get the human-readable version number from the available list.
+   */
+  protected String getLatestPrettyVersion(Contribution contrib) {
+    Contribution newestContrib = findAvailableContribution(contrib);
+    if (newestContrib != null) {
+      return newestContrib.getPrettyVersion();
+    }
+    return null;
   }
 
 
@@ -305,7 +348,7 @@ public class ContributionListing {
             }
 
             String[] contribLines = PApplet.subset(lines, start, end - start);
-            StringDict contribParams = Util.readSettings(file.getName(), contribLines);
+            StringDict contribParams = Util.readSettings(file.getName(), contribLines, false);
             outgoing.add(new AvailableContribution(contribType, contribParams));
             start = end + 1;
           }
@@ -320,47 +363,9 @@ public class ContributionListing {
 
 
   /**
-   * TODO This needs to be called when the listing loads, and also
-   *      the contribs list has been updated (for whatever reason).
-   *      In addition, the caller (presumably Base) should update all
-   *      Editor windows with the correct number of items available.
-   * @return The number of contributions that have available updates.
+   * Used by JavaEditor to auto-import. Not known to be used by other Modes.
    */
-  public int countUpdates(Base base) {
-    int count = 0;
-    for (ModeContribution mc : base.getModeContribs()) {
-      if (hasUpdates(mc)) {
-        count++;
-      }
-    }
-    if (base.getActiveEditor() != null) {
-      for (Library lib : base.getActiveEditor().getMode().contribLibraries) {
-        if (hasUpdates(lib)) {
-          count++;
-        }
-      }
-      for (Library lib : base.getActiveEditor().getMode().coreLibraries) {
-        if (hasUpdates(lib)) {
-          count++;
-        }
-      }
-    }
-    for (ToolContribution tc : base.getToolContribs()) {
-      if (hasUpdates(tc)) {
-        count++;
-      }
-    }
-    for (ExamplesContribution ec : base.getContribExamples()) {
-      if (hasUpdates(ec)) {
-        count++;
-      }
-    }
-    return count;
-  }
-
-
-  /** Used by JavaEditor to auto-import */
-  public Map<String, Contribution> getLibrariesByImportHeader() {
-    return librariesByImportHeader;
+  public Map<String, Contribution> getLibraryImportMap() {
+    return importToLibrary;
   }
 }

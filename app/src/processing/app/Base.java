@@ -3,7 +3,7 @@
 /*
   Part of the Processing project - http://processing.org
 
-  Copyright (c) 2012-22 The Processing Foundation
+  Copyright (c) 2012-23 The Processing Foundation
   Copyright (c) 2004-12 Ben Fry and Casey Reas
   Copyright (c) 2001-04 Massachusetts Institute of Technology
 
@@ -54,9 +54,9 @@ import processing.data.StringList;
 public class Base {
   // Added accessors for 0218 because the UpdateCheck class was not properly
   // updating the values, due to javac inlining the static final values.
-  static private final int REVISION = 1287;
+  static private final int REVISION = 1291;
   /** This might be replaced by main() if there's a lib/version.txt file. */
-  static private String VERSION_NAME = "1287"; //$NON-NLS-1$
+  static private String VERSION_NAME = "1291"; //$NON-NLS-1$
 
   static final public String SKETCH_BUNDLE_EXT = ".pdez";
   static final public String CONTRIB_BUNDLE_EXT = ".pdex";
@@ -103,8 +103,8 @@ public class Base {
   private Mode coreMode;
 
   // TODO can these be Set objects, or are they expected to be in order?
-  protected List<ModeContribution> contribModes;
-  protected List<ExamplesContribution> contribExamples;
+  private List<ModeContribution> contribModes;
+  private List<ExamplesContribution> contribExamples;
 
   /** These aren't even dynamically loaded, they're hard-wired here. */
   private List<Tool> internalTools;
@@ -112,6 +112,9 @@ public class Base {
   // TODO can these be Set objects, or are they expected to be in order?
   private List<ToolContribution> coreTools;
   private List<ToolContribution> contribTools;
+
+  /** Current tally of available updates (used for new Editor windows). */
+  private int updatesAvailable = 0;
 
   // Used by handleOpen(), this saves the chooser to remember the directory.
   // Doesn't appear to be necessary with the AWT native file dialog.
@@ -202,7 +205,6 @@ public class Base {
       }
     }
 
-
     Platform.init();
     // call after Platform.init() because we need the settings folder
     Console.startup();
@@ -258,9 +260,17 @@ public class Base {
 
       // Create a location for untitled sketches
       try {
-        //untitledFolder = Util.createTempFolder("untitled", "sketches", null);
-        //untitledFolder.deleteOnExit();
-        untitledFolder = Util.getProcessingTemp();
+        // Users on a shared machine may also share a TEMP folder,
+        // which can cause naming collisions; use a UUID as the name
+        // for the subfolder to introduce another layer of indirection.
+        // https://github.com/processing/processing4/issues/549
+        // The UUID also prevents collisions when restarting the
+        // software. Otherwise, after using up the a-z naming options
+        // it was not possible for users to restart (without manually
+        // finding and deleting the TEMP files).
+        // https://github.com/processing/processing4/issues/582
+        String uuid = UUID.randomUUID().toString();
+        untitledFolder = new File(Util.getProcessingTemp(), uuid);
 
       } catch (IOException e) {
         Messages.showError("Trouble without a name",
@@ -348,35 +358,10 @@ public class Base {
 
 
   static private void handleWelcomeScreen(Base base) {
-    /*
-    boolean sketchbookPrompt = false;
-    if (Preferences.getBoolean("welcome.four.beta.show")) {
-      // only ask once about split sketchbooks
-      if (!Preferences.getBoolean("welcome.four.beta.seen")) {
-        // Check if there's a 2.0 sketchbook present
-        String oldPath = Preferences.getOldSketchbookPath();
-        if (oldPath != null) {
-          String newPath = Preferences.getSketchbookPath();
-          // If newPath is null, this is the first run of any 3.x version
-          if (newPath == null) {
-            sketchbookPrompt = true;
-
-          } else if (oldPath.equals(newPath)) {
-            // If both exist and are identical, then the user has used
-            // pre-releases of 3.x and needs to be warned about the
-            // larger changes in this release.
-            sketchbookPrompt = true;
-          }
-        }
-      }
-    }
-    */
-
     // Needs to be shown after the first editor window opens, so that it
     // shows up on top, and doesn't prevent an editor window from opening.
     if (Preferences.getBoolean("welcome.four.show")) {
       try {
-        //new Welcome(base, sketchbookPrompt);
         new Welcome(base);
       } catch (IOException e) {
         Messages.showTrace("Unwelcoming",
@@ -389,8 +374,8 @@ public class Base {
 
   /**
    * Temporary workaround as we try to sort out
-   * https://github.com/processing/processing4/issues/231
-   * and https://github.com/processing/processing4/issues/226
+   * <a href="https://github.com/processing/processing4/issues/231">231</a>
+   * and <a href="https://github.com/processing/processing4/issues/226">226</a>.
    */
   static private void handleCrustyDisplay() {
     /*
@@ -437,9 +422,9 @@ public class Base {
         if (expiredFiles != null) {
           // Remove the files approved for deletion
           for (File file : expiredFiles) {
-            //file.delete();  // not as safe
             try {
-              Platform.deleteFile(file);  // move to trash
+              // move to trash or delete if unavailable
+              Platform.deleteFile(file);
             } catch (IOException e) {
               e.printStackTrace();
             }
@@ -579,9 +564,14 @@ public class Base {
     cl.downloadAvailableList(this, new ContribProgress(null));
     long t9 = System.currentTimeMillis();
 
-//    System.out.println("core modes: " + (t2b-t2) + ", contrib modes: " + (t2c-t2b) + ", contrib ex: " + (t2c-t2b));
-//    System.out.println("base took " + (t2-t1) + " " + (t3-t2) + " " + (t4-t3) +
-//      " " + (t5-t4) + " t6-t5=" + (t6-t5) + " " + (t7-t6) + " handleNew=" + (t8-t7) + " " + (t9-t8) + " ms");
+    if (DEBUG) {
+      System.out.println("core modes: " + (t2b-t2) +
+                         ", contrib modes: " + (t2c-t2b) +
+                         ", contrib ex: " + (t2c-t2b));
+      System.out.println("base took " + (t2-t1) + " " + (t3-t2) + " " + (t4-t3) +
+                         " " + (t5-t4) + " t6-t5=" + (t6-t5) + " " + (t7-t6) +
+                         " handleNew=" + (t8-t7) + " " + (t9-t8) + " ms");
+    }
   }
 
 
@@ -614,122 +604,15 @@ public class Base {
   }
 
 
-  void buildCoreModes() {
-    ModeContribution javaModeContrib =
-      ModeContribution.load(this, Platform.getContentFile("modes/java"),
-                            getDefaultModeIdentifier());
-    if (javaModeContrib == null) {
-      Messages.showError("Startup Error",
-                "Could not load Java Mode, please reinstall Processing.",
-                         new Exception("ModeContribution.load() was null"));
-
-    } else {
-      // PDE X calls getModeList() while it's loading, so coreModes must be set
-      //coreModes = new Mode[] { javaModeContrib.getMode() };
-      coreMode = javaModeContrib.getMode();
-    }
-  }
-
-
-  /**
-   * Instantiates and adds new contributed modes to the contribModes list.
-   * Checks for duplicates so the same mode isn't instantiated twice. Does not
-   * remove modes because modes can't be removed once they are instantiated.
-   */
-  void rebuildContribModes() {
-    if (contribModes == null) {
-      contribModes = new ArrayList<>();
-    }
-    File modesFolder = getSketchbookModesFolder();
-    List<ModeContribution> contribModes = getModeContribs();
-
-    Map<File, ModeContribution> known = new HashMap<>();
-    for (ModeContribution contrib : contribModes) {
-      known.put(contrib.getFolder(), contrib);
-    }
-    File[] potential = ContributionType.MODE.listCandidates(modesFolder);
-    // If modesFolder does not exist or is inaccessible (folks might like to
-    // mess with folders then report it as a bug) 'potential' will be null.
-    if (potential != null) {
-      for (File folder : potential) {
-        if (!known.containsKey(folder)) {
-          try {
-            contribModes.add(new ModeContribution(this, folder, null));
-          } catch (NoSuchMethodError | NoClassDefFoundError ne) {
-            System.err.println(folder.getName() + " is not compatible with this version of Processing");
-            if (DEBUG) ne.printStackTrace();
-          } catch (InvocationTargetException ite) {
-            System.err.println(folder.getName() + " could not be loaded and may not compatible with this version of Processing");
-            if (DEBUG) ite.printStackTrace();
-          } catch (IgnorableException ig) {
-            Messages.log(ig.getMessage());
-            if (DEBUG) ig.printStackTrace();
-          } catch (Throwable e) {
-            System.err.println("Could not load Mode from " + folder);
-            e.printStackTrace();
-          }
-        } else {
-          known.remove(folder);  // remove this item as already been seen
-        }
-      }
-    }
-
-    // This allows you to build and test a Mode from Eclipse
-    // -Dusemode=com.foo.FrobMode:/path/to/FrobMode
-    final String useMode = System.getProperty("usemode");
-    if (useMode != null) {
-      final String[] modeInfo = useMode.split(":", 2);
-      final String modeClass = modeInfo[0];
-      final String modeResourcePath = modeInfo[1];
-      System.out.println("Attempting to load " + modeClass + " with resources at " + modeResourcePath);
-      ModeContribution mc = ModeContribution.load(this, new File(modeResourcePath), modeClass);
-      contribModes.add(mc);
-      File key = getFileForContrib(mc, known);
-      if (key != null) {
-        known.remove(key);
-      }
-    }
-    if (known.size() != 0) {
-      for (ModeContribution mc : known.values()) {
-        System.out.println("Extraneous Mode entry: " + mc.getName());
-      }
-    }
-  }
-
-
-  static private File getFileForContrib(ModeContribution contrib,
-                                 Map<File, ModeContribution> known) {
-    for (Entry<File, ModeContribution> entry : known.entrySet()) {
-      if (entry.getValue() == contrib) {
-        return entry.getKey();
-      }
-    }
-    return null;
-  }
-
-
-  /**
-   * Instantiates and adds new contributed modes to the contribModes list.
-   * Checks for duplicates so the same mode isn't instantiates twice. Does not
-   * remove modes because modes can't be removed once they are instantiated.
-   */
-  void rebuildContribExamples() {
-    if (contribExamples == null) {
-      contribExamples = new ArrayList<>();
-    }
-    ExamplesContribution.loadMissing(this);
-  }
-
-
   // . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
 
 
   /**
-   * Tools require an 'Editor' object when they're instantiated, but the
-   * activeEditor will be null when the first Editor that opens is creating
-   * its Tools menu. This will temporarily set the activeEditor to the one
-   * that's opening so that we don't go all NPE on startup. If there's already
-   * an active editor, then this does nothing.
+   * Tools require an 'Editor' object when they're instantiated, but
+   * the activeEditor will be null when the first Editor that opens is
+   * creating its Tools menu. This will temporarily set the activeEditor
+   * to the one that's opening so that we don't go all NPE on startup.
+   * If there's already an active editor, then this does nothing.
    */
   public void checkFirstEditor(Editor editor) {
     if (activeEditor == null) {
@@ -799,19 +682,161 @@ public class Base {
   }
 
 
+  /**
+   * Get all the contributed Modes, Libraries, Tools, and Examples.
+   * Used by the Contribution Manager to report what's installed while
+   * checking for updates and available contributions.
+   */
+  public Set<Contribution> getInstalledContribs() {
+    List<ModeContribution> modeContribs = getContribModes();
+    Set<Contribution> contributions = new HashSet<>(modeContribs);
+
+    for (ModeContribution modeContrib : modeContribs) {
+      Mode mode = modeContrib.getMode();
+      contributions.addAll(mode.contribLibraries);
+      contributions.addAll(mode.foundationLibraries);
+    }
+
+    contributions.addAll(getContribTools());
+    contributions.addAll(getContribExamples());
+    return contributions;
+  }
+
+
+  public void tallyUpdatesAvailable() {
+    // Significant rewrite from previous version seen in
+    // https://github.com/processing/processing4/commit/a2e8cd7
+    // Also counting all updates, not just those for the current Mode.
+    // (Too confusing otherwise, having different counts.)
+
+    Set<Contribution> installed = getInstalledContribs();
+    ContributionListing listing = ContributionListing.getInstance();
+
+    int newCount = 0;
+    for (Contribution contrib : installed) {
+      if (listing.hasUpdates(contrib)) {
+        newCount++;
+      }
+    }
+    updatesAvailable = newCount;
+
+    synchronized (editors) {
+      for (Editor editor : editors) {
+        editor.setUpdatesAvailable(updatesAvailable);
+      }
+    }
+  }
+
+
   // . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
 
 
-  private int updatesAvailable = 0;
-
-
-  public void setUpdatesAvailable(int n) {
-    updatesAvailable = n;
-    synchronized (editors) {
-      for (Editor e : editors) {
-        e.setUpdatesAvailable(n);
+  public List<Mode> getModeList() {
+    List<Mode> outgoing = new ArrayList<>();
+    outgoing.add(coreMode);
+    if (contribModes != null) {
+      for (ModeContribution contrib : contribModes) {
+        outgoing.add(contrib.getMode());
       }
     }
+    return outgoing;
+  }
+
+
+  void buildCoreModes() {
+    ModeContribution javaModeContrib =
+      ModeContribution.load(this, Platform.getContentFile("modes/java"),
+                            getDefaultModeIdentifier());
+    if (javaModeContrib == null) {
+      Messages.showError("Startup Error",
+                "Could not load Java Mode, please reinstall Processing.",
+                         new Exception("ModeContribution.load() was null"));
+
+    } else {
+      // PDE X calls getModeList() while it's loading, so coreModes must be set
+      //coreModes = new Mode[] { javaModeContrib.getMode() };
+      coreMode = javaModeContrib.getMode();
+    }
+  }
+
+
+  public List<ModeContribution> getContribModes() {
+    return contribModes;
+  }
+
+
+  /**
+   * Instantiates and adds new contributed modes to the contribModes list.
+   * Checks for duplicates so the same mode isn't instantiated twice. Does not
+   * remove modes because modes can't be removed once they are instantiated.
+   */
+  void rebuildContribModes() {
+    if (contribModes == null) {
+      contribModes = new ArrayList<>();
+    }
+    File modesFolder = getSketchbookModesFolder();
+    Map<File, ModeContribution> known = new HashMap<>();
+    for (ModeContribution contrib : getContribModes()) {
+      known.put(contrib.getFolder(), contrib);
+    }
+    File[] potential = ContributionType.MODE.listCandidates(modesFolder);
+    // If modesFolder does not exist or is inaccessible (folks might like to
+    // mess with folders then report it as a bug) 'potential' will be null.
+    if (potential != null) {
+      for (File folder : potential) {
+        if (!known.containsKey(folder)) {
+          try {
+            contribModes.add(new ModeContribution(this, folder, null));
+          } catch (NoSuchMethodError | NoClassDefFoundError ne) {
+            System.err.println(folder.getName() + " is not compatible with this version of Processing");
+            if (DEBUG) ne.printStackTrace();
+          } catch (InvocationTargetException ite) {
+            System.err.println(folder.getName() + " could not be loaded and may not compatible with this version of Processing");
+            if (DEBUG) ite.printStackTrace();
+          } catch (IgnorableException ig) {
+            Messages.log(ig.getMessage());
+            if (DEBUG) ig.printStackTrace();
+          } catch (Throwable e) {
+            System.err.println("Could not load Mode from " + folder);
+            e.printStackTrace();
+          }
+        } else {
+          known.remove(folder);  // remove this item as already been seen
+        }
+      }
+    }
+
+    // This allows you to build and test a Mode from Eclipse
+    // -Dusemode=com.foo.FrobMode:/path/to/FrobMode
+    final String useMode = System.getProperty("usemode");
+    if (useMode != null) {
+      final String[] modeInfo = useMode.split(":", 2);
+      final String modeClass = modeInfo[0];
+      final String modeResourcePath = modeInfo[1];
+      System.out.println("Attempting to load " + modeClass + " with resources at " + modeResourcePath);
+      ModeContribution mc = ModeContribution.load(this, new File(modeResourcePath), modeClass);
+      contribModes.add(mc);
+      File key = getModeContribFile(mc, known);
+      if (key != null) {
+        known.remove(key);
+      }
+    }
+    if (known.size() != 0) {
+      for (ModeContribution mc : known.values()) {
+        System.out.println("Extraneous Mode entry: " + mc.getName());
+      }
+    }
+  }
+
+
+  static private File getModeContribFile(ModeContribution contrib,
+                                         Map<File, ModeContribution> known) {
+    for (Entry<File, ModeContribution> entry : known.entrySet()) {
+      if (entry.getValue() == contrib) {
+        return entry.getKey();
+      }
+    }
+    return null;
   }
 
 
@@ -823,20 +848,13 @@ public class Base {
   }
 
 
-  public List<ToolContribution> getToolContribs() {
+  public List<ToolContribution> getContribTools() {
     return contribTools;
   }
 
 
-  /*
-  public void removeToolContrib(ToolContribution tc) {
-    contribTools.remove(tc);
-  }
-  */
-
-
   public void rebuildToolList() {
-    // Only do this once because the list of internal tools will never change
+    // Only do these once because the list of internal tools will never change
     if (internalTools == null) {
       internalTools = new ArrayList<>();
 
@@ -852,7 +870,7 @@ public class Base {
       //initInternalTool("processing.app.tools.UpdateTheme");
     }
 
-    // No need to reload these either
+    // Only init() these the first time they're loaded
     if (coreTools == null) {
       coreTools = ToolContribution.loadAll(Base.getToolsFolder());
       for (Tool tool : coreTools) {
@@ -860,7 +878,7 @@ public class Base {
       }
     }
 
-    // Rebuilt when new tools installed, etc
+    // Reset the contributed tools and re-init() all of them.
     contribTools = ToolContribution.loadAll(Base.getSketchbookToolsFolder());
     for (Tool tool : contribTools) {
       try {
@@ -929,14 +947,14 @@ public class Base {
     }
     toolsMenu.addSeparator();
 
-    if (coreTools.size() > 0) {
+    if (!coreTools.isEmpty()) {
       for (Tool tool : coreTools) {
         toolsMenu.add(createToolItem(tool));
       }
       toolsMenu.addSeparator();
     }
 
-    if (contribTools.size() > 0) {
+    if (!contribTools.isEmpty()) {
       for (Tool tool : contribTools) {
         toolsMenu.add(createToolItem(tool));
       }
@@ -948,29 +966,6 @@ public class Base {
     manageTools.addActionListener(e -> ContributionManager.openTools());
     toolsMenu.add(manageTools);
   }
-
-
-  /*
-  static public void addTools(JMenu menu, List<Tool> tools) {
-    Map<String, JMenuItem> toolItems = new HashMap<String, JMenuItem>();
-
-    for (final Tool tool : tools) {
-      // If init() fails, the item won't be added to the menu
-      addToolItem(tool, toolItems);
-    }
-
-    List<String> toolList = new ArrayList<String>(toolItems.keySet());
-    if (toolList.size() > 0) {
-      if (menu.getItemCount() != 0) {
-        menu.addSeparator();
-      }
-      Collections.sort(toolList);
-      for (String title : toolList) {
-        menu.add(toolItems.get(title));
-      }
-    }
-  }
-  */
 
 
   JMenuItem createToolItem(final Tool tool) { //, Map<String, JMenuItem> toolItems) {
@@ -1001,60 +996,14 @@ public class Base {
   // . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
 
 
-  public List<ModeContribution> getModeContribs() {
-    return contribModes;
-  }
-
-
-  public List<Mode> getModeList() {
-    //List<Mode> outgoing = new ArrayList<>(Arrays.asList(coreModes));
-    List<Mode> outgoing = new ArrayList<>();
-    outgoing.add(coreMode);
-    if (contribModes != null) {
-      for (ModeContribution contrib : contribModes) {
-        outgoing.add(contrib.getMode());
-      }
-    }
-    return outgoing;
+  void rebuildContribExamples() {
+    contribExamples =
+      ExamplesContribution.loadAll(getSketchbookExamplesFolder());
   }
 
 
   public List<ExamplesContribution> getContribExamples() {
     return contribExamples;
-  }
-
-
-  private Set<Contribution> getInstalledContribs() {
-    List<ModeContribution> modeContribs = getModeContribs();
-    Set<Contribution> contributions = new HashSet<>(modeContribs);
-
-    for (ModeContribution modeContrib : modeContribs) {
-      Mode mode = modeContrib.getMode();
-      contributions.addAll(new ArrayList<>(mode.contribLibraries));
-    }
-
-    // how is this different from getToolContribs()?
-    // TODO this duplicates code in Editor, but it's not editor-specific
-    contributions.addAll(ToolContribution.loadAll(getSketchbookToolsFolder()));
-
-    contributions.addAll(getContribExamples());
-    return contributions;
-  }
-
-
-  public byte[] getInstalledContribsInfo() {
-    Set<Contribution> contribs = getInstalledContribs();
-    StringList entries = new StringList();
-    for (Contribution c : contribs) {
-      String entry = c.getTypeName() + "=" +
-        PApplet.urlEncode(String.format("name=%s\nurl=%s\nrevision=%d\nversion=%s",
-                                        c.getName(), c.getUrl(),
-                                        c.getVersion(), c.getBenignVersion()));
-      entries.append(entry);
-    }
-    String joined =
-      "id=" + UpdateCheck.getUpdateID() + "&" + entries.join("&");
-    return joined.getBytes();
   }
 
 
@@ -1122,101 +1071,6 @@ public class Base {
     // Against all (or at least most) odds, we were able to reassign the Mode
     return true;
   }
-
-
-  /*
-  private boolean isCompatible(Sketch sketch, Mode mode) {
-    for (final SketchCode code : sketch.getCode()) {
-      if (!mode.validExtension(code.getExtension())) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-
-  private static class ModeInfo {
-    public final String title;
-    public final String id;
-
-    public ModeInfo(String id, String title) {
-      this.id = id;
-      this.title = title;
-    }
-  }
-
-
-  private static ModeInfo modeInfoFor(final File sketch) {
-    final File sketchFolder = sketch.getParentFile();
-    final File sketchProps = new File(sketchFolder, "sketch.properties");
-    if (!sketchProps.exists()) {
-      return null;
-    }
-    try {
-      final Settings settings = new Settings(sketchProps);
-      final String title = settings.get("mode");
-      final String id = settings.get("mode.id");
-      if (title == null || id == null) {
-        return null;
-      }
-      return new ModeInfo(id, title);
-    } catch (IOException e) {
-      System.err.println("While trying to read " + sketchProps + ": "
-        + e.getMessage());
-    }
-    return null;
-  }
-  */
-
-
-  /*
-  private Mode promptForMode(final File passedFile) {
-    final String filename = passedFile.getName();
-    final String extension =
-      filename.substring(filename.lastIndexOf('.') + 1).toLowerCase();
-    final List<Mode> possibleModes = new ArrayList<>();
-    for (final Mode mode : getModeList()) {
-      if (mode.canEdit(passedFile)) {
-        possibleModes.add(mode);
-      }
-    }
-    if (possibleModes.size() == 0) {
-      final String msg =
-        "I don't know how to open a sketch with the \"" + extension + "\"\n" +
-        "file extension. You'll have to install a different\n" +
-        "Mode for that.";
-      Messages.showWarning("Modeless Dialog", msg);
-      return null;
-
-    } else if (possibleModes.size() == 1) {
-      // If there's one Mode that can open this sketch, just open it
-      return possibleModes.get(0);
-
-    } else {
-      // More than one Mode possible, prompt the user
-      Mode[] modes = possibleModes.toArray(new Mode[0]);
-      return (Mode) JOptionPane.showInputDialog(null,
-        (nextMode.getTitle() + " Mode can't open ." + extension + " files, " +
-          "but you have more than one Mode\ninstalled that can. " +
-          "Select which you would like to use:"),
-        "Choose Wisely",
-        JOptionPane.QUESTION_MESSAGE,
-        null, modes, modes[0]);
-    }
-  }
-  */
-
-
-  /*
-  private Mode selectMode(final File sketch) {
-    final ModeInfo modeInfo = modeInfoFor(sketch);
-    final Mode specifiedMode = modeInfo == null ? null : findMode(modeInfo.id);
-    if (specifiedMode != null) {
-      return specifiedMode;
-    }
-    return promptForMode(sketch, modeInfo);
-  }
-  */
 
 
   protected Mode findMode(String id) {
@@ -1690,9 +1544,9 @@ public class Base {
    * Examples window, because Modes like Python and Android do not have
    * "sketch.properties" files in each example folder.
    */
-  public Editor handleOpen(String path, Mode mode) {
+  public Editor handleOpenExample(String path, Mode mode) {
     nextMode = mode;
-    return handleOpenInternal(path, false);
+    return handleOpenInternal(path, true);
   }
 
 
@@ -1745,7 +1599,7 @@ public class Base {
                              "while opening a new editor window. Please report this.", t, true);
         } else {
           Messages.showTrace("Mode Problems",
-                             "A nasty error occurred while trying to use " + nextMode.getTitle() + ".\n" +
+                             "A nasty error occurred while trying to use “" + nextMode.getTitle() + "”.\n" +
                              "It may not be compatible with this version of Processing.\n" +
                              "Try updating the Mode or contact its author for a new version.", t, false);
         }
@@ -1754,11 +1608,11 @@ public class Base {
         Mode defaultMode = getDefaultMode();
         if (nextMode == defaultMode) {
           // unreachable? hopefully?
-          Messages.showError("Editor Problems",
-                             "An error occurred while trying to change modes.\n" +
-                             "We'll have to quit for now because it's an\n" +
-                             "unfortunate bit of indigestion with the default Mode.",
-                             null);
+          Messages.showError("Editor Problems", """
+              An error occurred while trying to change modes.
+              We'll have to quit for now because it's an
+              unfortunate bit of indigestion with the default Mode.
+              """, null);
         } else {
           // Don't leave the user hanging or the PDE locked up
           // https://github.com/processing/processing/issues/4467
@@ -2060,10 +1914,10 @@ public class Base {
       if (new File(path).exists()) {
         handleOpen(path);
       } else {
-        Messages.showWarning("Sketch Disappeared",
-                             "The selected sketch no longer exists.\n" +
-                             "You may need to restart Processing to update\n" +
-                             "the sketchbook menu.", null);
+        Messages.showWarning("Sketch Disappeared","""
+            The selected sketch no longer exists.
+            You may need to restart Processing to update
+            the sketchbook menu.""", null);
       }
     };
     // offers no speed improvement
@@ -2313,12 +2167,12 @@ public class Base {
     if (sketchbookPath != null) {
       sketchbookFolder = new File(sketchbookPath);
       if (!sketchbookFolder.exists()) {
-        Messages.showWarning("Sketchbook folder disappeared",
-                             "The sketchbook folder no longer exists.\n" +
-                             "Processing will switch to the default sketchbook\n" +
-                             "location, and create a new sketchbook folder if\n" +
-                             "necessary. Processing will then stop talking\n" +
-                             "about itself in the third person.", null);
+        Messages.showWarning("Sketchbook folder disappeared","""
+            The sketchbook folder no longer exists.
+            Processing will switch to the default sketchbook
+            location, and create a new sketchbook folder if
+            necessary. Processing will then stop talking
+            about itself in the third person.""", null);
         sketchbookFolder = null;
       }
     }
@@ -2336,6 +2190,8 @@ public class Base {
         }
       }
     }
+
+    // make sure the libraries/modes/tools directories exist
     makeSketchbookSubfolders();
   }
 

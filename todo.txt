@@ -1,52 +1,25 @@
-1287 (4.0.2)
-X using Java 17 in more syntax
-X fix potential casting problem with Platform and DefaultPlatform
-X   should be unreachable, but fixed anyway
-X bring back getCodeIndex() for GUI Builder Tool
-X   https://github.com/processing/processing4/issues/545
+1291 (4.1.3 or 4.2)
 
-contribs
-X Catalan translation for Processing 4.0.1
-X   https://github.com/processing/processing4/issues/550
-X   https://github.com/processing/processing4/pull/554
-
-docs
-X added a "Translations" page to the wiki
-X   https://github.com/processing/processing4/wiki/Translations
-X   https://github.com/processing/processing/wiki/Localization
-X explanation of how to create a naming.json file
-X   https://github.com/processing/processing4/wiki/Naming-Sketches
+design
+X tool tips for errors/warnings not picking up correct colors
+X   also fix the margins and border
+_ completion mode pop-up not following dark and light mode conventions
+_ update console.scrollbar.thumb.rollover.color and console.scrollbar.thumb.pressed.color
+_   currently just using .enabled.color because they weren't in ColorSet
 
 
-before 4.0.2
-_ if naming scheme produces a sketch w/ the same name, what happens?
-_   probably a crash (or infinite loop?) need to check
-_ temp folders owned by one user can't be overwritten by another
-_   this was on Linux; curious if Windows has an issue too?
-_   overwrite with -Djava.io.tmpdir=/path/to/tmpdir
-_   maybe we should use java.io.tmpdir -> processing -> $USER
-_   https://github.com/processing/processing4/issues/549
-_ "Show Sketch Folder" for libraries needs to treat the sketch as Untitled
-_   and with that, switch to another directory
-_   https://github.com/processing/processing4/issues/548
+_ more contribs manager concurrency problems
+_   https://github.com/processing/processing4/issues/640
 
+
+_ export to IntelliJ? how tricky?
+_   just copy jars to /lib?
+_   point to binaries in /Applications/Processing.app? (no)
+
+_ add a protocol handler for pdex and pdez
+_   https://github.com/processing/processing4/issues/559
 
 _ set more build.xml files to use Java 17
-_ remove target.path from build/build.xml
-_   maybe simpler way to write version? sheesh
-
-
-_ args passed to main() aren't working
-_   (there was a bug report for this already?)
-_   were the run() and runSketch() methods merged w/o realizing loss of args?
-_   runSketch() probably needs to pass applet args and sketch args separately
-_   though this can't be done w/o breaking Python
-
-
-contrib
-X Fix vertical placement of top elements in the Manager window
-X   https://github.com/processing/processing4/issues/520
-X   https://github.com/processing/processing4/pull/539
 
 
 known issues
@@ -121,12 +94,7 @@ _   https://github.com/processing/processing4/wiki/Preferences#proxies
 _ right-click/ctrl-click for jump to declaration causes hang
 _   https://github.com/processing/processing4/issues/527
 _   https://github.com/processing/processing4/issues/551
-
-design
-_ completion mode pop-up not following dark and light mode conventions
-_ tool tips for errors/warnings not picking up correct colors
-_ update console.scrollbar.thumb.rollover.color and console.scrollbar.thumb.pressed.color
-_   currently just using .enabled.color because they weren't in ColorSet
+_   https://github.com/processing/processing4/issues/595
 
 
 organize this mess
@@ -321,26 +289,29 @@ _ when adding a new library, its examples aren't added to the list until restart
 
 PDE / Manager (4.x notes)
 
-_ remove dorky loading.gif (used in ContributionTab and UpdateContributionTab)
-_   should be a better way to implement this
-_ if no internet available, install buttons disabled, but not clear why broken
-_ also if update check disabled, user isn't notified that contribs unavailable
+_ Update All with several entries is really locking things up
+_   not clear if it's work being done on the EDT
+_   or that all the threads are running immediately (rather than sequentially)
+_   probably need to move these into an Executor
+_ rip out JProgressBar from StatusPanel/StatusDetail
+X   show progress in the list instead
+_   also make possible to start install by clicking the list
+_ if contribution listing is still downloading, need to indicate
+_   especially when no previous contribs.txt is in the prefs folder
+/ if no internet available, install buttons disabled, but not clear why broken
+X   update button no longer disabled
+_   but still need to indicate internet unavailable on install errors
 _ currently no indication that contrib download failed
 _   so the 'try again' won't show up; everything looks fine
 _   (was this for the contrib listing? or an actual contrib?)
-_ ContributionTab.updateContributionListing()
-_   this one shouldn't be in a single tab
-_   and it should include all contribs (method from Base to get in one swoop?)
-_   this is also likely the cause of per-Mode weirdness
-_ Base.setUpdatesAvailable() is called from half a dozen places!?
+_ also if update check disabled, user isn't notified that contribs unavailable
+/ Base.setUpdatesAvailable() is called from half a dozen places!?
+X   this is now tallyUpdatesAvailable() a
 _ how to handle contrib manager download/retry/etc and showing progress
-_ ListPanel.configureStatusColumnLabel() getting null DetailPanel objects
-_   seems to be out of sync/unavailable data based on more recent contrib changes?
-_ ManagerFrame.downloadAndUpdateContributionListing()
-_   should not even be run, because the contribs load on startup
-_   but ContributionTab.tryAgainButton needs to be able to request re-download
-_ ManagerFrame.makeAndShowTab()
-_   this one looks like it's gonna get called multiple times
+_ entries in the list de-select on install or all the excessive contrib changes
+_   (i.e. note how hitting 'Install' actually deselects the entry in the list, ugh)
+_   this means we can never clear the status panel
+_   need to fix the excessive data model and contribChanged() calls first
 _ holy s*t ContributionTableModel is using all of the contribs
 _ after failed update of Mode, the button is no longer available
 _   have to click something else, then click back on the Mode line again
@@ -353,9 +324,6 @@ _ when opening manager, animation runs briefly then freezes
 _ DetailPanel setContribution() being called 4x for each contrib on startup
 _ during install of contrib, progress is halting during the install
 _   probably too much happening on the EDT that should not be
-_ optimize ContributionTab addListener() call in constructor
-X   no longer calling addListener() on every single entry, whcih helps
-_   but what else might that change be breaking?
 _ StatusPanel seems to be recreated entirely
 _ StatusPanel being reset twice on each click
 _   is checking for previous, but apparently that's not working
@@ -389,11 +357,10 @@ _   https://github.com/processing/processing/issues/4757
 
 PDE / Manager (3.x notes)
 
-_   vertical centering of the search box in the manager
 _ “could not move the contribution to the backup folder” message while updating
 _   problem is that any sketch that uses a library, the lib is stuck as "in use"
 _   https://github.com/processing/processing/issues/4973
-_ issues with updating modes
+_ failed Mode updates leaving around tmp folders (that appear to be legit Modes)
 _   https://github.com/processing/processing/issues/5424
 _ examples window not updating on install
 _   open examples window
@@ -417,19 +384,9 @@ _   looks like ContributionListing.getScrollableUnitIncrement() returns early
 _ Examples window closes and re-opens during library install/remove
 _   https://github.com/processing/processing/issues/3304
 _ several TODO items listed in ContributionPanel
-_ something to set min/max versions that are supported by a library
 _ ability to cancel a download/install
-_ we shouldn't use .properties extension for modes, et al
-_   because a .properties file is iso8859-1
-_ make note that .properties file *must* be utf-8
-_   if not it'll make things gross (andre sier flob library)
 _ why wasn't Library moved to LibraryContribution?
 _   or that LibraryContribution needs to be a wrapper around it?
-_ send info on 'check for updates' so we know about libs/modes/etc?
-_   how to disclose to users?
-_   only send for items that are part of the public list
-_     otherwise we're sending private libraries/installs
-_     although this won't pick up old libraries not on the new system
 _ classpath conflicts..
 _   getPackageList.. from Library... maybe others?
 _   really need to make sure that a weird core.jar isn't being imported
@@ -446,17 +403,7 @@ _   "Update 4 items" as a button name
 _ new libraries not picked up when changing sketchbook location
 _ make sure contrib manager can run w/o a network connection
 _   or if a bad document comes through, it can recover
-_ alternating blue/white backgrounds aren't updated after changing filter
-_   just need to call a repaint() after a filter change?
-_ check with Casey about coloring for error messages
-_ test on Windows and Linux
-_ font size for "Downloading" on progress bar is too large
-_   but changing the size breaks the vertical centering
-_ wheel mouse is super jumpy
-_   something about unit increment in ContributionListPanel
-_ arrow keys up/down move scroll bar, not selection
-_ fonts/etc need to be set in one place where they can be edited
-_   move styling to separate constants that are more accessible
+
 
 
 PDE / Preferences
@@ -771,9 +718,6 @@ _   https://github.com/processing/processing4/issues/234
 _   we're not posting any, can we suppress the "allow notifications" message?
 _   https://developer.apple.com/documentation/usernotifications
 _   https://developer.apple.com/documentation/usernotifications/asking_permission_to_use_notifications
-_ Help Menu disabled on OS X (looks like a JVM bug)
-_   https://github.com/processing/processing/issues/4353#issuecomment-237715947
-_   still broken in 11.0.8
 _ Java bug prevents us from setting the dock name of a sketch run from the PDE
 _   https://github.com/processing/processing/issues/5045
 _ client properties
