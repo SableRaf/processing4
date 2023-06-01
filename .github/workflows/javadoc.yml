@@ -27,7 +27,7 @@ jobs:
       - name: Checkout javadocs repo
         uses: actions/checkout@v2
         with:
-          repository: processing/processing-javadocs
+          repository: SableRaf/processing-javadocs
           token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           path: ./processing-javadocs
       
