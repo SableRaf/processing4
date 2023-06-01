@@ -54,7 +54,7 @@ public class ContributionListing {
   final private ReentrantLock downloadingLock = new ReentrantLock();
 
   final Set<AvailableContribution> availableContribs;
-  final private Map<String, Contribution> importToLibrary;
+  final private Map<String, Contribution> libraryExports;
   final private Set<Contribution> allContribs;
 
   Set<ListPanel> listPanels;
@@ -63,7 +63,7 @@ public class ContributionListing {
   private ContributionListing() {
     listPanels = new HashSet<>();
     availableContribs = new HashSet<>();
-    importToLibrary = new HashMap<>();
+    libraryExports = new HashMap<>();
     allContribs = ConcurrentHashMap.newKeySet();
 
     listingFile = Base.getSettingsFile(LOCAL_FILENAME);
@@ -97,20 +97,21 @@ public class ContributionListing {
    * If it matches an entry from contribs.txt, replace that entry.
    * If not, add it to the list as a new contrib.
    */
-  static protected void updateInstalled(Set<Contribution> installed) {
+  static protected void updateInstalled(Set<Contribution> installedContribs) {
     ContributionListing listing = getInstance();
 
-    for (Contribution contribution : installed) {
-      Contribution existingContribution = listing.findContribution(contribution);
-      if (existingContribution != null) {
-        if (existingContribution != contribution) {
+    for (Contribution installed : installedContribs) {
+      Contribution listed = listing.findContribution(installed);
+      if (listed != null) {
+        if (listed != installed) {
           // don't replace contrib with itself
-          listing.replaceContribution(existingContribution, contribution);
+          listing.replaceContribution(listed, installed);
         }
       } else {
-        listing.addContribution(contribution);
+        listing.addContribution(installed);
       }
     }
+    listing.updateTableModels();
   }
 
 
@@ -128,17 +129,24 @@ public class ContributionListing {
   // This could just be a remove followed by an add, but contributionChanged()
   // is a little weird, so that should be cleaned up first [fry 230114]
   protected void replaceContribution(Contribution oldContrib, Contribution newContrib) {
+//    removeContribution(oldContrib);
+//    addContribution(newContrib);
+
     if (oldContrib != null && newContrib != null) {
+      /*
       if (oldContrib.getImports() != null) {
         for (String importName : oldContrib.getImports()) {
+//          System.out.println("replaceContribution() removing import " + importName);
           importToLibrary.remove(importName);
         }
       }
       if (newContrib.getImports() != null) {
         for (String importName : newContrib.getImports()) {
+//          System.out.println("replaceContribution() putting import " + importName);
           importToLibrary.put(importName, newContrib);
         }
       }
+      */
       allContribs.remove(oldContrib);
       allContribs.add(newContrib);
 
@@ -150,11 +158,14 @@ public class ContributionListing {
 
 
   private void addContribution(Contribution contribution) {
+      /*
     if (contribution.getImports() != null) {
       for (String importName : contribution.getImports()) {
-        getLibraryImportMap().put(importName, contribution);
+//        System.out.println("addContribution() putting import " + importName);
+        importToLibrary.put(importName, contribution);
       }
     }
+      */
     allContribs.add(contribution);
 
     for (ListPanel listener : listPanels) {
@@ -164,15 +175,25 @@ public class ContributionListing {
 
 
   protected void removeContribution(Contribution contribution) {
+    /*
     if (contribution.getImports() != null) {
       for (String importName : contribution.getImports()) {
-        getLibraryImportMap().remove(importName);
+//        System.out.println("removeContribution() removing import " + importName);
+        importToLibrary.remove(importName);
       }
     }
+    */
     allContribs.remove(contribution);
 
     for (ListPanel listener : listPanels) {
       listener.contributionRemoved(contribution);
+    }
+  }
+
+
+  protected void updateTableModels() {
+    for (ListPanel listener : listPanels) {
+      listener.updateModel();
     }
   }
 
@@ -259,20 +280,31 @@ public class ContributionListing {
   }
 
 
-  protected boolean isDownloaded() {
-    return listDownloaded;
-  }
-
-
   // Thread: EDT
   private void loadAvailableList(File file) {
     listingFile = file;
 
     availableContribs.clear();
     availableContribs.addAll(parseContribList(listingFile));
-    for (Contribution contribution : availableContribs) {
-      addContribution(contribution);
+
+    // Only updated whenever the available list is loaded.
+    // No need to do this after/during the installation process.
+    libraryExports.clear();
+
+    for (Contribution available : availableContribs) {
+      addContribution(available);
+      if (available.getType() == ContributionType.LIBRARY) {
+        // Only needs to be called for libraries, the list of exports
+        // maps packages to available libraries for auto-installation.
+        StringList exports = available.getExports();
+        if (exports != null) {
+          for (String export : exports) {
+            libraryExports.put(export, available);
+          }
+        }
+      }
     }
+    updateTableModels();
   }
 
 
@@ -280,7 +312,7 @@ public class ContributionListing {
    * Bundles information about what contribs are installed, so that they can
    * be reported at the <a href="https://download.processing.org/stats/">stats</a> link.
    * (Eventually this may also be used to show relative popularity of contribs.)
-   * Read more about it <a href="https://github.com/processing/processing4/wiki/FAQ#checking-for-updates-or-why-is-processing-connecting-to-the-network">in the FAQ</a>.</a>
+   * Read more about it <a href="<a href="https://github.com/processing/processing4/wiki/FAQ#checking-for-updates">here</a>.">in the FAQ</a>.
    */
   private byte[] makeContribsBlob(Base base) {
     Set<Contribution> contribs = base.getInstalledContribs();
@@ -365,7 +397,7 @@ public class ContributionListing {
   /**
    * Used by JavaEditor to auto-import. Not known to be used by other Modes.
    */
-  public Map<String, Contribution> getLibraryImportMap() {
-    return importToLibrary;
+  public Map<String, Contribution> getLibraryExports() {
+    return libraryExports;
   }
 }

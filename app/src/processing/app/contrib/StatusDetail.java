@@ -108,8 +108,12 @@ class StatusDetail {
     StatusAnimator(ListPanel listPanel) {
       thread = new Thread(() -> {
         while (Thread.currentThread() == thread) {
-          //listPanel.repaint();
-          listPanel.table.repaint();
+          // Should be ok to call this from any Thread (EDT or otherwise)
+          // https://www.oracle.com/java/technologies/painting.html#mgr
+          listPanel.repaint();
+//          System.out.println("calling repaint() " + System.currentTimeMillis());
+//          listPanel.table.repaint();
+//          listPanel.contributionTab.repaint();
           // TODO Ideally this should be only calling update on the relevant
           //      cell with model.fireTableCellUpdated(), but that requires
           //      more state housekeeping that's already broken. [fry 230115]
@@ -185,7 +189,9 @@ class StatusDetail {
         //      should be doing an actual replacement (i.e. what happens with
         //      the previous contrib?) And because it's usually (always?) not
         //      actually removing anything, shouldn't this be add? [fry 230114]
-        ContributionListing.getInstance().replaceContribution(contrib, contrib);
+        ContributionListing listing = ContributionListing.getInstance();
+        listing.replaceContribution(contrib, contrib);
+        listing.updateTableModels();
       }
     }
   }
@@ -209,10 +215,10 @@ class StatusDetail {
         @Override
         public void finishedAction() {
           statusPanel.resetProgressBar();
-          AvailableContribution ad =
+          AvailableContribution available =
             contribListing.findAvailableContribution(contrib);
           // install the new version of the Mode (or Tool)
-          installContribution(ad, listPanel);
+          installContribution(available, listPanel);
         }
 
         @Override
@@ -225,15 +231,16 @@ class StatusDetail {
             getLocalContrib().setUpdateFlag();
             getLocalContrib().setDeletionFlag(false);
             contribListing.replaceContribution(contrib, contrib);
+            contribListing.updateTableModels();
           }
         }
       };
       getLocalContrib().removeContribution(base, progress, statusPanel, true);
 
     } else {
-      AvailableContribution ad =
+      AvailableContribution available =
         contribListing.findAvailableContribution(contrib);
-      installContribution(ad, listPanel);
+      installContribution(available, listPanel);
     }
   }
 

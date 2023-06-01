@@ -23,7 +23,13 @@
 package processing.app;
 
 import java.io.*;
+import java.net.HttpURLConnection;
+import java.net.JarURLConnection;
+import java.net.URL;
+import java.net.URLConnection;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Enumeration;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -67,6 +73,29 @@ public class Util {
   }
 
 
+  static public InputStream createInput(String path) throws IOException {
+    URL url = new URL(path);
+    URLConnection conn = url.openConnection();
+
+    if (conn instanceof HttpURLConnection httpConn) {
+      // Will not handle a protocol change (see below)
+      httpConn.setInstanceFollowRedirects(true);
+      int response = httpConn.getResponseCode();
+      // Default won't follow HTTP -> HTTPS redirects for security reasons
+      // http://stackoverflow.com/a/1884427
+      if (response >= 300 && response < 400) {
+        String newLocation = httpConn.getHeaderField("Location");
+        return createInput(newLocation);
+      }
+      return conn.getInputStream();
+
+    } else if (conn instanceof JarURLConnection) {
+      return url.openStream();
+    }
+    return null;
+  }
+
+
   /**
    * Read from a file with a bunch of attribute/value pairs
    * that are separated by = and ignore comments with #.
@@ -94,8 +123,15 @@ public class Util {
    * by = (the equals sign). The # (hash) symbol is used to denote comments.
    * As of 4.0.2, set allowHex to true if hex colors are used in the file.
    * This will disable support for comments that begin later in the line.
-   * If allowHex is false, then comments can appear later on a line, which is
-   * necessary for the contribution .properties files. Blank lines are ignored.
+   * Blank lines are always ignored.
+   *
+   * @param filename Name of the input file; only used for error messages.
+   * @param lines Lines already parsed from the input file.
+   * @param allowHex If false, # indicates comment to the end of line,
+   *                 which is necessary for the .properties files
+   *                 used by Contributions. If true, # is unharmed,
+   *                 allowing for hex characters and colors (used by
+   *                 themes and preferences).
    */
   static public StringDict readSettings(String filename, String[] lines, boolean allowHex) {
     StringDict settings = new StringDict();
@@ -245,7 +281,25 @@ public class Util {
     String tmpDir = System.getProperty("java.io.tmpdir");
     File directory = new File(tmpDir, "processing");
     if (!directory.exists()) {
-      if (!directory.mkdirs()) {
+      if (directory.mkdirs()) {
+        // Set the parent directory writable for multi-user machines.
+        // https://github.com/processing/processing4/issues/666
+        if (Platform.isLinux()) {
+          Path path = directory.toPath();
+          Files.setPosixFilePermissions(path, PosixFilePermissions.fromString("rwxrwxrwx"));
+
+        } else {
+          if (!directory.setReadable(true, false)) {
+            System.err.println("Could not set readable for all: " + directory);
+          }
+          if (!directory.setWritable(true, false)) {
+            System.err.println("Could not set writable for all: " + directory);
+          }
+          if (!directory.setExecutable(true, false)) {
+            System.err.println("Could not set writable for all: " + directory);
+          }
+        }
+      } else {
         throw new IOException("Could not create temp directory. " +
           "Check that you have permissions to write to " + tmpDir);
       }
@@ -457,7 +511,7 @@ public class Util {
 
   /**
    * @param folder source folder to search
-   * @return a list of .jar and .zip files in that folder
+   * @return an array of .jar and .zip files in that folder
    */
   static public File[] listJarFiles(File folder) {
     return folder.listFiles((dir, name) ->
@@ -578,9 +632,9 @@ public class Util {
         if (!entry.isDirectory()) {
           String name = entry.getName();
 
-          // Avoid META-INF because some jokers but .class files in there
+          // Avoid META-INF because some jokers put .class files in there
           // https://github.com/processing/processing/issues/5778
-          if (name.endsWith(".class") && !name.startsWith("META-INF/")) {
+          if (name.endsWith(".class") && !name.contains("META-INF/")) {
             int slash = name.lastIndexOf('/');
             if (slash != -1) {
               String packageName = name.substring(0, slash);
@@ -633,31 +687,27 @@ public class Util {
    * Extract the contents of a .zip archive into a folder.
    * Ignores (does not extract) any __MACOSX files from macOS archives.
    */
-  static public void unzip(File zipFile, File dest) {
-    try {
-      FileInputStream fis = new FileInputStream(zipFile);
-      CheckedInputStream checksum = new CheckedInputStream(fis, new Adler32());
-      ZipInputStream zis = new ZipInputStream(new BufferedInputStream(checksum));
-      ZipEntry entry;
-      while ((entry = zis.getNextEntry()) != null) {
-        final String name = entry.getName();
-        if (!name.startsWith(("__MACOSX"))) {
-          File currentFile = new File(dest, name);
-          if (entry.isDirectory()) {
-            currentFile.mkdirs();
-          } else {
-            File parentDir = currentFile.getParentFile();
-            // Sometimes the directory entries aren't already created
-            if (!parentDir.exists()) {
-              parentDir.mkdirs();
-            }
-            currentFile.createNewFile();
-            unzipEntry(zis, currentFile);
+  static public void unzip(File zipFile, File dest) throws IOException {
+    FileInputStream fis = new FileInputStream(zipFile);
+    CheckedInputStream checksum = new CheckedInputStream(fis, new Adler32());
+    ZipInputStream zis = new ZipInputStream(new BufferedInputStream(checksum));
+    ZipEntry entry;
+    while ((entry = zis.getNextEntry()) != null) {
+      final String name = entry.getName();
+      if (!name.startsWith(("__MACOSX"))) {
+        File currentFile = new File(dest, name);
+        if (entry.isDirectory()) {
+          currentFile.mkdirs();
+        } else {
+          File parentDir = currentFile.getParentFile();
+          // Sometimes the directory entries aren't already created
+          if (!parentDir.exists()) {
+            parentDir.mkdirs();
           }
+          currentFile.createNewFile();
+          unzipEntry(zis, currentFile);
         }
       }
-    } catch (Exception e) {
-      e.printStackTrace();
     }
   }
 

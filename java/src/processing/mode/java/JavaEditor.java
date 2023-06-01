@@ -3,7 +3,7 @@
 /*
 Part of the Processing project - http://processing.org
 
-Copyright (c) 2012-22 The Processing Foundation
+Copyright (c) 2012-23 The Processing Foundation
 Copyright (c) 2004-12 Ben Fry and Casey Reas
 Copyright (c) 2001-04 Massachusetts Institute of Technology
 
@@ -117,22 +117,6 @@ public class JavaEditor extends Editor {
     }
     // setting breakpoints will flag sketch as modified, so override this here
     getSketch().setModified(false);
-
-    /*
-    // hack to add a JPanel to the right-hand side of the text area
-    JPanel textAndError = new JPanel();
-    // parent is a vertical box with the toolbar, the header, and the text area
-    Box box = (Box) textarea.getParent();
-    // remove the text area temporarily
-    box.remove(2);
-    textAndError.setLayout(new BorderLayout());
-    errorColumn =  new MarkerColumn(this, textarea.getMinimumSize().height);
-    textAndError.add(errorColumn, BorderLayout.EAST);
-    textarea.setBounds(0, 0, errorColumn.getX() - 1, textarea.getHeight());
-    textAndError.add(textarea);
-    // add our hacked version back to the editor
-    box.add(textAndError);
-    */
 
     preprocService = new PreprocService(this.jmode, this.sketch); 
 
@@ -359,8 +343,8 @@ public class JavaEditor extends Editor {
     boolean contribToolMenuItemAdded;
 
     List<ToolContribution> contribTools = base.getContribTools();
-    // Adding this in in case a reference folder is added for MovieMaker, or in case
-    // other core tools are introduced later
+    // Adding this in case a reference folder is added for MovieMaker,
+    // or in case other core tools are introduced later.
     coreToolMenuItemAdded = addToolReferencesToSubMenu(base.getCoreTools(), toolRefSubmenu);
 
     if (coreToolMenuItemAdded && !contribTools.isEmpty())
@@ -485,26 +469,23 @@ public class JavaEditor extends Editor {
 
 
   /**
-   * Handler for Sketch &rarr; Export Application
+   * Handler for Sketch → Export Application
    */
   public void handleExportApplication() {
     if (handleExportCheckModified()) {
       statusNotice(Language.text("export.notice.exporting"));
-      try {
-        if (ExportPrompt.trigger(this)) {
-          Platform.openFolder(sketch.getFolder());
-          statusNotice(Language.text("export.notice.exporting.done"));
-          //} else {
-          // error message will already be visible
-          // or there was no error, in which case it was canceled.
+      ExportPrompt ep = new ExportPrompt(this, () -> {
+        try {
+          if (jmode.handleExportApplication(getSketch())) {
+            Platform.openFolder(sketch.getFolder());
+            statusNotice(Language.text("export.notice.exporting.done"));
+          }
+        } catch (Exception e) {
+          statusNotice(Language.text("export.notice.exporting.error"));
+          e.printStackTrace();
         }
-      } catch (SketchException se) {
-        EventQueue.invokeLater(() -> statusError(se));
-
-      } catch (Exception e) {
-        statusNotice(Language.text("export.notice.exporting.error"));
-        e.printStackTrace();
-      }
+      });
+      ep.trigger();
     }
   }
 
@@ -547,7 +528,7 @@ public class JavaEditor extends Editor {
 
       } else {
         // why it's not CANCEL_OPTION is beyond me (at least on the mac)
-        // but f-- it.. let's get this shite done..
+        // but f-- it... let's get this shite done...
         //} else if (result == JOptionPane.CANCEL_OPTION) {
         statusNotice(Language.text("export.notice.cancel.unsaved_changes"));
         //toolbar.clear();
@@ -675,7 +656,6 @@ public class JavaEditor extends Editor {
   }
 
 
-
   public boolean handleSaveAs() {
     //System.out.println("handleSaveAs");
     String oldName = getSketch().getCode(0).getFileName();
@@ -705,11 +685,10 @@ public class JavaEditor extends Editor {
 
 
   /**
-   * Add import statements to the current tab for all of packages inside
+   * Add import statements to the current tab for all packages inside
    * the specified jar file.
    */
   public void handleImportLibrary(String libraryName) {
-
     // make sure the user didn't hide the sketch folder
     sketch.ensureExistence();
 
@@ -1238,7 +1217,7 @@ public class JavaEditor extends Editor {
    */
   private List<AvailableContribution> getNotInstalledAvailableLibs(List<String> importHeadersList) {
     Map<String, Contribution> importMap =
-      ContributionListing.getInstance().getLibraryImportMap();
+      ContributionListing.getInstance().getLibraryExports();
     List<AvailableContribution> libList = new ArrayList<>();
     for (String importHeaders : importHeadersList) {
       int dot = importHeaders.lastIndexOf('.');
@@ -1256,7 +1235,7 @@ public class JavaEditor extends Editor {
         library = this.getMode().getLibrary(entry);
         if (library == null) {
           Contribution c = importMap.get(importHeaders);
-          if (c != null && c instanceof AvailableContribution) {
+          if (c instanceof AvailableContribution) {  // also checks null
             libList.add((AvailableContribution) c);// System.out.println(importHeaders
                                                    // + "not found");
           }
@@ -1264,7 +1243,7 @@ public class JavaEditor extends Editor {
       } catch (Exception e) {
         // Not gonna happen (hopefully)
         Contribution c = importMap.get(importHeaders);
-        if (c != null && c instanceof AvailableContribution) {
+        if (c instanceof AvailableContribution) {  // also checks null
           libList.add((AvailableContribution) c);// System.out.println(importHeaders
                                                  // + "not found");
         }
@@ -1828,21 +1807,6 @@ public class JavaEditor extends Editor {
   }
 
 
-//  /**
-//   * Checks if the sketch contains java tabs. If it does, the editor ain't
-//   * built for it, yet. Also, user should really start looking at a full IDE
-//   * like Eclipse. Disable compilation check and some more features.
-//   */
-//  private boolean checkForJavaTabs() {
-//    for (SketchCode code : getSketch().getCode()) {
-//      if (code.getExtension().equals("java")) {
-//        return true;
-//      }
-//    }
-//    return false;
-//  }
-
-
   @Override
   public void applyPreferences() {
     super.applyPreferences();
@@ -1926,8 +1890,8 @@ public class JavaEditor extends Editor {
         textarea.invalidate();
       }
     } else {
-      // number values were not modified but we need to load the saved code
-      // because of some formatting changes
+      // number values were not modified, but we need to load
+      // the saved code because of some formatting changes
       loadSavedCode();
       textarea.invalidate();
     }
@@ -1972,7 +1936,7 @@ public class JavaEditor extends Editor {
   }
 
 
-  protected void initEditorCode(List<List<Handle>> handles, boolean withSpaces) {
+  protected void initEditorCode(List<List<Handle>> handles) {
     SketchCode[] sketchCode = sketch.getCode();
     for (int tab=0; tab<baseCode.length; tab++) {
         // beautify the numbers
@@ -1983,15 +1947,9 @@ public class JavaEditor extends Editor {
           int s = n.startChar + charInc;
           int e = n.endChar + charInc;
           String newStr = n.strNewValue;
-          if (withSpaces) {
-            newStr = "  " + newStr + "  ";
-          }
           code = replaceString(code, s, e, newStr);
           n.newStartChar = n.startChar + charInc;
           charInc += n.strNewValue.length() - n.strValue.length();
-          if (withSpaces) {
-            charInc += 4;
-          }
           n.newEndChar = n.endChar + charInc;
         }
 
@@ -2019,23 +1977,6 @@ public class JavaEditor extends Editor {
     // this will update the current code
     setCode(sketch.getCurrentCode());
   }
-
-
-  /*
-  private void removeSpacesFromCode() {
-    SketchCode[] code = sketch.getCode();
-    for (int i=0; i<code.length; i++) {
-      String c = code[i].getProgram();
-      //c = c.substring(SPACE_AMOUNT, c.length() - SPACE_AMOUNT);
-      code[i].setProgram(c);
-      // TODO Wild Hack: set document to null so the text editor will refresh
-      // the program contents when the document tab is being clicked
-      code[i].setDocument(null);
-    }
-    // this will update the current code
-    setCode(sketch.getCurrentCode());
-  }
-  */
 
 
   /**
@@ -2104,11 +2045,15 @@ public class JavaEditor extends Editor {
     // header contains variable declaration, initialization,
     // and OSC listener function
     String header;
-    header = "\n\n" +
-      "/*************************/\n" +
-      "/* MODIFIED BY TWEAKMODE */\n" +
-      "/*************************/\n" +
-      "\n\n";
+    header = """
+
+
+      /*************************/
+      /* MODIFIED BY TWEAKMODE */
+      /*************************/
+
+
+      """;
 
     // add needed OSC imports and the global OSC object
     header += "import java.net.*;\n";
@@ -2148,11 +2093,16 @@ public class JavaEditor extends Editor {
 
     // add call to our initAllVars and initOSC functions
     // from the setup() function.
-    String addToSetup = "\n\n\n"+
-      "  /* TWEAKMODE */\n"+
-      "    tweakmode_initAllVars();\n"+
-      "    tweakmode_initCommunication();\n"+
-      "  /* TWEAKMODE */\n\n";
+    String addToSetup = """
+
+
+
+        /* TWEAKMODE */
+          tweakmode_initAllVars();
+          tweakmode_initCommunication();
+        /* TWEAKMODE */
+
+      """;
 
     afterSizePos = SketchParser.getAfterSizePos(c);
     c = replaceString(c, afterSizePos, afterSizePos, addToSetup);

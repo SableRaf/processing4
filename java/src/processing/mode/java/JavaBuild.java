@@ -3,7 +3,7 @@
 /*
 Part of the Processing project - http://processing.org
 
-Copyright (c) 2012-19 The Processing Foundation
+Copyright (c) 2012-23 The Processing Foundation
 Copyright (c) 2004-12 Ben Fry and Casey Reas
 Copyright (c) 2001-04 Massachusetts Institute of Technology
 
@@ -36,6 +36,8 @@ import org.apache.tools.ant.ProjectHelper;
 
 import processing.app.*;
 import processing.app.exec.ProcessHelper;
+import processing.app.platform.MacPlatform;
+import processing.app.ui.ExportPrompt;
 import processing.core.PApplet;
 import processing.core.PConstants;
 import processing.data.StringList;
@@ -48,7 +50,6 @@ public class JavaBuild {
   static public final String PACKAGE_REGEX =
     "(?:^|\\s|;)package\\s+(\\S+)\\;";
 
-  static public final String JAVA_DOWNLOAD_URL = "https://adoptium.net/";
   static public final String MIN_JAVA_VERSION = "17";
 
   protected Sketch sketch;
@@ -916,7 +917,7 @@ public class JavaBuild {
       // attempt to code sign if the Xcode tools appear to be installed
       String appPath = dotAppFolder.getAbsolutePath();
       if (Platform.isMacOS()) {
-        if (isXcodeInstalled()) {
+        if (MacPlatform.isXcodeInstalled()) {
 //        if (embedJava) {
 //          ProcessHelper.ffs("codesign", "--force", "--sign", "--deep", "-", jdkPath);
 //        }
@@ -950,8 +951,9 @@ public class JavaBuild {
 
       XML config = new XML("launch4jConfig");
       config.addChild("headerType").setContent("gui");
+      //config.addChild("headerType").setContent("console");
       config.addChild("dontWrapJar").setContent("true");
-      config.addChild("downloadUrl").setContent(JAVA_DOWNLOAD_URL);
+      config.addChild("downloadUrl").setContent(ExportPrompt.JAVA_DOWNLOAD_URL);
 
       File exeFile = new File(destFolder, sketch.getName() + ".exe");
       config.addChild("outfile").setContent(exeFile.getAbsolutePath());
@@ -966,7 +968,13 @@ public class JavaBuild {
       }
       XML jre = config.addChild("jre");
       if (embedJava) {
-        jre.addChild("path").setContent("java");
+        // also falling back to PATH if the "java" folder is later removed
+        jre.addChild("path").setContent("java;%PATH%");
+      } else {
+        // needed to make OpenJDK work properly
+        // https://sourceforge.net/p/launch4j/bugs/197/
+        // https://github.com/processing/processing4/issues/667
+        jre.addChild("path").setContent("%PATH%");
       }
       jre.addChild("minVersion").setContent(MIN_JAVA_VERSION);
       for (String opt : runOptions) {
@@ -1082,30 +1090,6 @@ public class JavaBuild {
       "--add-exports", "javafx.graphics/com.sun.javafx.geom=ALL-UNNAMED",
       "--add-exports", "javafx.graphics/com.sun.glass.ui=ALL-UNNAMED"
     };
-  }
-
-
-  static Boolean xcodeInstalled;
-
-  static protected boolean isXcodeInstalled() {
-    if (xcodeInstalled == null) {
-      // Note that xcode-select is *not* an xcrun tool: it's part of the OS.
-      // pkgutil --file-info /usr/bin/xcode-select
-      // https://stackoverflow.com/a/32752859/18247494
-      StringList stdout = new StringList();
-      StringList stderr = new StringList();
-      int result = PApplet.exec(stdout, stderr, "/usr/bin/xcode-select", "-p");
-
-      // Returns 0 if installed, 2 if not (-1 if exception)
-      // http://stackoverflow.com/questions/15371925
-      xcodeInstalled = (result == 0);
-    }
-    return xcodeInstalled;
-  }
-
-
-  static protected void resetXcodeInstalled() {
-    xcodeInstalled = null;  // give them another chance
   }
 
 

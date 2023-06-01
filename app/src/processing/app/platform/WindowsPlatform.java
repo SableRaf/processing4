@@ -3,7 +3,7 @@
 /*
   Part of the Processing project - http://processing.org
 
-  Copyright (c) 2012-2013 The Processing Foundation
+  Copyright (c) 2012-2023 The Processing Foundation
   Copyright (c) 2008-2012 Ben Fry and Casey Reas
 
   This program is free software; you can redistribute it and/or
@@ -26,7 +26,6 @@ import java.awt.*;
 import java.io.File;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
-import java.util.Optional;
 
 import com.sun.jna.Library;
 import com.sun.jna.Native;
@@ -50,35 +49,88 @@ import processing.core.PApplet;
 /**
  * Platform-specific glue for Windows.
  */
+@SuppressWarnings("unused")
 public class WindowsPlatform extends DefaultPlatform {
-
   static final String APP_NAME = "Processing";
-  static final String[] APP_EXTENSIONS = {
-    // This could iterate through each Mode and call getDefaultExtension(),
-    // however if p5jsMode were installed, .js files would be automatically
-    // associated with Processing on each run, which would be... not great.
-    ".pde", ".pyde", Base.SKETCH_BUNDLE_EXT, Base.CONTRIB_BUNDLE_EXT
+
+  static class Association {
+    String extension;
+    String title;
+    String doc;
+    //int icon;
+    String icon;
+
+    Association(String extension, String title, String doc, String icon) {
+      this.extension = extension;
+      this.title = title;
+      this.doc = doc;
+      this.icon = icon;
+    }
+
+    boolean register() throws UnsupportedEncodingException {
+      // "To change the settings for the interactive user, store the changes
+      // under HKEY_CURRENT_USER\Software\Classes rather than HKEY_CLASSES_ROOT."
+      // msdn.microsoft.com/en-us/library/windows/desktop/ms724475(v=vs.85).aspx
+      final REGISTRY_ROOT_KEY rootKey = REGISTRY_ROOT_KEY.CURRENT_USER;
+      final String iconPath = REG_APP_DIR + "\\lib\\" + icon;
+
+      return
+        WindowsRegistry.createKey(rootKey, "Software\\Classes", extension) &&
+        WindowsRegistry.setStringValue(rootKey, "Software\\Classes\\" + extension, "", doc) &&
+
+        // Now give files with a .pde extension a name for the explorer
+        WindowsRegistry.createKey(rootKey, "Software\\Classes", doc) &&
+        WindowsRegistry.setStringValue(rootKey, "Software\\Classes\\" + doc, "", title) &&
+
+        // Assign an .ico file to this document type
+        // https://learn.microsoft.com/en-us/windows/win32/shell/how-to-assign-a-custom-icon-to-a-file-type
+        WindowsRegistry.createKey(rootKey, "Software\\Classes\\" + doc, "DefaultIcon") &&
+        WindowsRegistry.setStringValue(rootKey, "Software\\Classes\\" + doc + "\\DefaultIcon", "", iconPath) &&
+
+        // Now associate the 'open' command with the current processing.exe
+        registerOpen(rootKey, "Software\\Classes\\" + doc);
+    }
+  }
+
+  static final Association[] ASSOCIATIONS = new Association[] {
+    new Association(".pde", "Processing Source Code", "Processing.Document", "pde.ico"),
+    new Association(".pyde", "Processing Python Source Code", "Processing.Document", "pde.ico"),
+    new Association(".pdez", "Processing Sketch Bundle", "Processing.Sketch.Document", "pdez.ico"),
+    new Association(".pdex", "Processing Contribution Bundle", "Processing.Contribution.Document", "pdex.ico"),
   };
+
+  // This could iterate through each Mode and call getDefaultExtension(),
+  // however if p5jsMode were installed, .js files would be automatically
+  // associated with Processing on each run, which would be... not great.
+//  static final String[][] APP_EXTENSIONS = new String[][] {
+//    { ".pde", "Processing Source Code" },
+//    { ".pyde", "Processing Python Source Code" },
+//    { Base.SKETCH_BUNDLE_EXT, "Processing Sketch Bundle" },
+//    { Base.CONTRIB_BUNDLE_EXT, "Processing Contribution Bundle" }
+//  };
+
+  static final String REG_APP_DIR =
+    System.getProperty("user.dir").replace('/', '\\');
   static final String REG_OPEN_COMMAND =
-    System.getProperty("user.dir").replace('/', '\\') +
-    "\\" + APP_NAME.toLowerCase() + ".exe \"%1\"";
-  static final String REG_DOC = APP_NAME + ".Document";
+    REG_APP_DIR + "\\" + APP_NAME.toLowerCase() + ".exe \"%1\"";
+  static final String[] APP_SCHEMES = { "pde" };  // use pde://
+
+  static final String AUTO_ASSOCIATE_PREF =
+    "platform.auto_file_type_associations";
 
   private static final float RESOLUTION_AT_NO_SCALE = 96;
-  private static final int VERTRES = 10;
-  private static final int DESKTOPVERTRES = 117;
 
-  private Optional<Float> cachedDisplayScaling;
+  private Float cachedDisplayScaling;
 
   public WindowsPlatform() {
     super();
-    cachedDisplayScaling = Optional.empty();
   }
 
   public void initBase(Base base) {
     super.initBase(base);
 
     checkAssociations();
+    checkSchemes();
 
     //checkQuickTime();
     checkPath();
@@ -157,22 +209,38 @@ public class WindowsPlatform extends DefaultPlatform {
    */
   protected void checkAssociations() {
     try {
-      if (Preferences.getBoolean("platform.auto_file_type_associations")) {
-        // Check the key that should be set by a previous run of Processing
-        String knownCommand =
-          WindowsRegistry.getStringValue(REGISTRY_ROOT_KEY.CURRENT_USER,
-                                         "Software\\Classes\\" + REG_DOC + "\\shell\\open\\command", "");
-        // If the association hasn't been set, or it's not correct, set it.
-        if (knownCommand == null || !knownCommand.equals(REG_OPEN_COMMAND)) {
-          setAssociations();
-
-        } else {  // check each extension
-          for (String extension : APP_EXTENSIONS) {
-            if (!WindowsRegistry.valueExists(REGISTRY_ROOT_KEY.CURRENT_USER,
-                                             "Software\\Classes", extension)) {
-              setAssociations();
-            }
+      if (Preferences.getBoolean(AUTO_ASSOCIATE_PREF)) {
+        for (Association assoc : ASSOCIATIONS) {
+          // Check the key that should be set by a previous run of the PDE
+          String knownCommand =
+            WindowsRegistry.getStringValue(REGISTRY_ROOT_KEY.CURRENT_USER,
+              "Software\\Classes\\" + assoc.doc + "\\shell\\open\\command", "");
+          // If the association hasn't been set, or it's not correct, set it.
+          if (knownCommand == null || !knownCommand.equals(REG_OPEN_COMMAND)) {
+            setAssociations();
           }
+
+          if (!WindowsRegistry.valueExists(REGISTRY_ROOT_KEY.CURRENT_USER,
+                                           "Software\\Classes", assoc.extension) ||
+              !WindowsRegistry.valueExists(REGISTRY_ROOT_KEY.CURRENT_USER,
+                               "Software\\Classes\\" + assoc.doc, "DefaultIcon")) {
+            setAssociations();
+          }
+
+        }
+      }
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
+  }
+
+
+  protected void checkSchemes() {
+    try {
+      for (String extension : APP_SCHEMES) {
+        if (!WindowsRegistry.valueExists(REGISTRY_ROOT_KEY.CURRENT_USER,
+          "Software\\Classes", extension)) {
+          setSchemes();
         }
       }
     } catch (Exception e) {
@@ -187,45 +255,9 @@ public class WindowsPlatform extends DefaultPlatform {
    * it would no longer silently fail on systems that have UAC turned on.
    */
   protected void setAssociations() throws UnsupportedEncodingException {
-    // http://support.microsoft.com/kb/184082
-    // http://msdn.microsoft.com/en-us/library/cc144175%28v=VS.85%29.aspx
-    // http://msdn.microsoft.com/en-us/library/cc144104%28v=VS.85%29.aspx
-    // http://msdn.microsoft.com/en-us/library/cc144067%28v=VS.85%29.aspx
-    // msdn.microsoft.com/en-us/library/windows/desktop/ms724475(v=vs.85).aspx
-
-//    HKEY_CLASSES_ROOT
-//    MyProgram.exe
-//       shell
-//          open
-//             command
-//                (Default) = C:\MyDir\MyProgram.exe "%1"
-
-/*
-    REGISTRY_ROOT_KEY rootKey = REGISTRY_ROOT_KEY.CLASSES_ROOT;
-    if (Registry.createKey(rootKey,
-                           "", ".pde") &&
-        Registry.setStringValue(rootKey,
-                                ".pde", "", DOC) &&
-
-        Registry.createKey(rootKey, "", DOC) &&
-        Registry.setStringValue(rootKey, DOC, "",
-                                "Processing Source Code") &&
-
-        Registry.createKey(rootKey,
-                           DOC, "shell") &&
-        Registry.createKey(rootKey,
-                           DOC + "\\shell", "open") &&
-        Registry.createKey(rootKey,
-                           DOC + "\\shell\\open", "command") &&
-        Registry.setStringValue(rootKey,
-                                DOC + "\\shell\\open\\command", "",
-                                openCommand)) {
-*/
-
-    // First create the .pde association
-    for (String extension : APP_EXTENSIONS) {
-      if (!registerExtension(extension)) {
-        Messages.log("Could not associate " + extension + "files, " +
+    for (Association assoc : ASSOCIATIONS) {
+      if (!assoc.register()) {
+        Messages.log("Could not associate " + assoc.extension + "files, " +
                      "turning off auto-associate pref.");
         Preferences.setBoolean("platform.auto_file_type_associations", false);
       }
@@ -233,25 +265,54 @@ public class WindowsPlatform extends DefaultPlatform {
   }
 
 
-  private boolean registerExtension(String extension) throws UnsupportedEncodingException {
+  protected void setSchemes() throws UnsupportedEncodingException {
+    for (String scheme : APP_SCHEMES) {
+      if (!registerScheme(scheme)) {
+        Messages.log("Error while trying to associate " + scheme + ":// URLs.");
+      }
+    }
+  }
+
+
+  static private boolean registerOpen(REGISTRY_ROOT_KEY rootKey, String prefix) throws UnsupportedEncodingException {
+    return (WindowsRegistry.createKey(rootKey, prefix, "shell") &&
+            WindowsRegistry.createKey(rootKey, prefix + "\\shell", "open") &&
+            WindowsRegistry.createKey(rootKey, prefix + "\\shell\\open", "command") &&
+            WindowsRegistry.setStringValue(rootKey, prefix + "\\shell\\open\\command", "", REG_OPEN_COMMAND));
+  }
+
+
+  /*
+  static private boolean registerExtension(String extension, String title, int iconIndex) throws UnsupportedEncodingException {
     // "To change the settings for the interactive user, store the changes
     // under HKEY_CURRENT_USER\Software\Classes rather than HKEY_CLASSES_ROOT."
     // msdn.microsoft.com/en-us/library/windows/desktop/ms724475(v=vs.85).aspx
     final REGISTRY_ROOT_KEY rootKey = REGISTRY_ROOT_KEY.CURRENT_USER;
-    final String docPrefix = "Software\\Classes\\" + REG_DOC;
+    final String prefix = "Software\\Classes\\" + REG_DOC;
 
     return (WindowsRegistry.createKey(rootKey, "Software\\Classes", extension) &&
             WindowsRegistry.setStringValue(rootKey, "Software\\Classes\\" + extension, "", REG_DOC) &&
 
             // Now give files with a .pde extension a name for the explorer
             WindowsRegistry.createKey(rootKey, "Software\\Classes", REG_DOC) &&
-            WindowsRegistry.setStringValue(rootKey, docPrefix, "", APP_NAME + " Source Code") &&
+            WindowsRegistry.setStringValue(rootKey, prefix, "", title) &&
 
             // Now associate the 'open' command with the current processing.exe
-            WindowsRegistry.createKey(rootKey, docPrefix, "shell") &&
-            WindowsRegistry.createKey(rootKey, docPrefix + "\\shell", "open") &&
-            WindowsRegistry.createKey(rootKey, docPrefix + "\\shell\\open", "command") &&
-            WindowsRegistry.setStringValue(rootKey, docPrefix + "\\shell\\open\\command", "", REG_OPEN_COMMAND));
+            registerOpen(rootKey, prefix));
+  }
+  */
+
+
+  private boolean registerScheme(String scheme) throws UnsupportedEncodingException {
+    final REGISTRY_ROOT_KEY rootKey = REGISTRY_ROOT_KEY.CURRENT_USER;
+    final String prefix = "Software\\Classes\\" + scheme;
+
+    return (WindowsRegistry.createKey(rootKey, "Software\\Classes", scheme) &&
+            WindowsRegistry.setStringValue(rootKey, prefix, "", "URL:" + scheme + " Protocol") &&
+            WindowsRegistry.setStringValue(rootKey, prefix, "URL Protocol", "") &&
+
+            // Identical to the associate command previously in registerExtension()
+            registerOpen(rootKey, prefix));
   }
 
 
@@ -327,9 +388,11 @@ public class WindowsPlatform extends DefaultPlatform {
       String path = new File("lib").getCanonicalPath();
 
       String msg = Util.containsNonASCII(path) ?
-        "Please move Processing to a location with only\n" +
-        "ASCII characters in the path and try again.\n" +
-        "https://github.com/processing/processing/issues/3543" :
+        """
+          Please move Processing to a location with only
+          ASCII characters in the path and try again.
+          https://github.com/processing/processing/issues/3543
+        """ :
         "Could not find JNA support files, please reinstall Processing.";
       Messages.showError("Windows JNA Problem", msg, ule);
       return null;  // unreachable
@@ -645,10 +708,10 @@ public class WindowsPlatform extends DefaultPlatform {
 
 
   public float getSystemZoom() {
-    if (cachedDisplayScaling.isEmpty()) {
-      cachedDisplayScaling = Optional.of(calculateSystemZoom());
+    if (cachedDisplayScaling == null) {
+      cachedDisplayScaling = calculateSystemZoom();
     }
-    return cachedDisplayScaling.get();
+    return cachedDisplayScaling;
   }
 
 
@@ -659,6 +722,9 @@ public class WindowsPlatform extends DefaultPlatform {
       float resolution = Toolkit.getDefaultToolkit().getScreenResolution();
       return resolution / RESOLUTION_AT_NO_SCALE;
     }
+
+    final int VERTRES = 10;
+    final int DESKTOPVERTRES = 117;
 
     float virtualResolution = GDI32.INSTANCE.GetDeviceCaps(hdc, VERTRES);
     float logicalResolution = GDI32.INSTANCE.GetDeviceCaps(hdc, DESKTOPVERTRES);

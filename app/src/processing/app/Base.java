@@ -54,9 +54,9 @@ import processing.data.StringList;
 public class Base {
   // Added accessors for 0218 because the UpdateCheck class was not properly
   // updating the values, due to javac inlining the static final values.
-  static private final int REVISION = 1291;
+  static private final int REVISION = 1293;
   /** This might be replaced by main() if there's a lib/version.txt file. */
-  static private String VERSION_NAME = "1291"; //$NON-NLS-1$
+  static private String VERSION_NAME = "1293"; //$NON-NLS-1$
 
   static final public String SKETCH_BUNDLE_EXT = ".pdez";
   static final public String CONTRIB_BUNDLE_EXT = ".pdex";
@@ -858,16 +858,15 @@ public class Base {
     if (internalTools == null) {
       internalTools = new ArrayList<>();
 
-      initInternalTool("processing.app.tools.Archiver");
-      initInternalTool("processing.app.tools.ColorSelector");
-      initInternalTool("processing.app.tools.CreateFont");
+      initInternalTool(processing.app.tools.Archiver.class);
+      initInternalTool(processing.app.tools.ColorSelector.class);
+      initInternalTool(processing.app.tools.CreateFont.class);
 
       if (Platform.isMacOS()) {
-        initInternalTool("processing.app.tools.InstallCommander");
+        initInternalTool(processing.app.tools.InstallCommander.class);
       }
 
-      initInternalTool("processing.app.tools.ThemeSelector");
-      //initInternalTool("processing.app.tools.UpdateTheme");
+      initInternalTool(processing.app.tools.ThemeSelector.class);
     }
 
     // Only init() these the first time they're loaded
@@ -913,9 +912,8 @@ public class Base {
   }
 
 
-  protected void initInternalTool(String className) {
+  protected void initInternalTool(Class<?> toolClass) {
     try {
-      Class<?> toolClass = Class.forName(className);
       final Tool tool = (Tool)
         toolClass.getDeclaredConstructor().newInstance();
 
@@ -1364,10 +1362,52 @@ public class Base {
 
 
   /**
+   * Handler for pde:// protocol URIs
+   * @param schemeUri the full URI, including pde://
+   */
+  public Editor handleScheme(String schemeUri) {
+    String location = schemeUri.substring(6);
+    if (location.length() > 0) {
+      // if it leads with a slash, then it's a file url
+      if (location.charAt(0) == '/') {
+        File file = new File(location);
+        if (file.exists()) {
+          handleOpen(location);  // it's a full path to a file
+        } else {
+          System.err.println(file + " does not exist.");
+        }
+      } else {
+        // turn it into an https url
+        final String url = "https://" + location;
+        if (location.toLowerCase().endsWith(".pdez") ||
+          location.toLowerCase().endsWith(".pdex")) {
+          String extension = location.substring(location.length() - 5);
+          try {
+            File tempFile = File.createTempFile("scheme", extension);
+            if (PApplet.saveStream(tempFile, Util.createInput(url))) {
+              return handleOpen(tempFile.getAbsolutePath());
+            } else {
+              System.err.println("Could not open " + tempFile);
+            }
+          } catch (IOException e) {
+            e.printStackTrace();
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+
+  /**
    * Open a sketch from the path specified. Do not use for untitled sketches.
    * Note that the user may have selected/double-clicked any .pde in a sketch.
    */
   public Editor handleOpen(String path) {
+    if (path.startsWith("pde://")) {
+      return handleScheme(path);
+    }
+
     if (path.endsWith(SKETCH_BUNDLE_EXT)) {
       return openSketchBundle(path);
 
@@ -1681,18 +1721,6 @@ public class Base {
         }
       }
 
-      /*
-      // wow, this is wrong (should only be called after the last window)
-      // but also outdated, because it's instance_server.* not server.*
-      // and Preferences.save() is also about restoring sketches.
-
-      Preferences.unset("server.port"); //$NON-NLS-1$
-      Preferences.unset("server.key"); //$NON-NLS-1$
-
-      // Save out the current prefs state
-      Preferences.save();
-       */
-
       if (defaultFileMenu == null) {
         if (preventQuit) {
           // need to close this editor, ever so temporarily
@@ -1724,7 +1752,10 @@ public class Base {
 
 
   /**
-   * Handler for File &rarr; Quit.
+   * Handler for File &rarr; Quit. Note that this is *only* for the
+   * File menu. On macOS, it will not call System.exit() because the
+   * application will handle that. If calling this from elsewhere,
+   * you'll need a System.exit() call on macOS.
    * @return false if canceled, true otherwise.
    */
   public boolean handleQuit() {
@@ -1774,6 +1805,53 @@ public class Base {
       }
     }
     return true;
+  }
+
+
+  public void handleRestart() {
+    File app = Platform.getProcessingApp();
+    System.out.println(app);
+    if (app.exists()) {
+      if (handleQuitEach()) {  // only if everything saved
+        SingleInstance.clearRunning();
+
+        // Launch on quit
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+          try {
+            //Runtime.getRuntime().exec(app.getAbsolutePath());
+            System.out.println("launching");
+            Process p;
+            if (Platform.isMacOS()) {
+              p = Runtime.getRuntime().exec(new String[] {
+                // -n allows more than one instance to be opened at a time
+                "open", "-n", "-a", app.getAbsolutePath()
+              });
+            } else if (Platform.isLinux()) {
+              p = Runtime.getRuntime().exec(new String[] {
+                app.getAbsolutePath()
+              });
+            } else {
+              p = Runtime.getRuntime().exec(new String[] {
+                "cmd", "/c", app.getAbsolutePath()
+              });
+            }
+            System.out.println("launched with result " + p.waitFor());
+            System.out.flush();
+          } catch (Exception e) {
+            e.printStackTrace();
+          }
+        }));
+        handleQuit();
+        // handleQuit() does not call System.exit() on macOS
+        if (Platform.isMacOS()) {
+          System.exit(0);
+        }
+      }
+    } else {
+      Messages.showWarning("Cannot Restart",
+        "Cannot automatically restart because the Processing\n" +
+        "application has been renamed. Please quit and then restart manually.");
+    }
   }
 
 

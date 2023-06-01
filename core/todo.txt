@@ -1,4 +1,8 @@
-1291 (4.1.3 or 4.2)
+1293 (4.2.1)
+
+
+JNA version of getting resolution https://stackoverflow.com/a/32588375
+https://stackoverflow.com/a/32588375
 
 
 _ args passed to main() aren't working

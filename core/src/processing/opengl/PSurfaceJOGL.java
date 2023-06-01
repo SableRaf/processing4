@@ -3,7 +3,7 @@
 /*
   Part of the Processing project - http://processing.org
 
-  Copyright (c) 2012-21 The Processing Foundation
+  Copyright (c) 2012-23 The Processing Foundation
   Copyright (c) 2004-12 Ben Fry and Casey Reas
   Copyright (c) 2001-04 Massachusetts Institute of Technology
 
@@ -98,6 +98,7 @@ public class PSurfaceJOGL implements PSurface {
 
   protected int sketchWidthRequested;
   protected int sketchHeightRequested;
+
   protected int sketchWidth;
   protected int sketchHeight;
 
@@ -117,8 +118,6 @@ public class PSurfaceJOGL implements PSurface {
   protected int windowScaleFactor;
 
   protected float[] currentPixelScale = { 0, 0 };
-
-//  protected boolean external = false;
 
 
   public PSurfaceJOGL(PGraphics graphics) {
@@ -171,8 +170,8 @@ public class PSurfaceJOGL implements PSurface {
   }
 
 
-  // TODO this code is mostly copied from code found in PSurfaceOpenGL,
-  //      they should probably be merged to avoid divergence [fry 211122]
+  // TODO This code is mostly copied from code found in PSurfaceAWT.
+  //      It should probably be merged to avoid divergence. [fry 211122]
   static protected Rectangle getDisplayBounds(int displayNum) {
     GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
     GraphicsDevice[] awtDevices = ge.getScreenDevices();
@@ -189,18 +188,25 @@ public class PSurfaceJOGL implements PSurface {
           System.err.format("Display %d is %s%n", i+1, awtDevices[i]);
         }
       }
-    } else if (0 < awtDevices.length) {
+//    } else if (0 < awtDevices.length) {
       // TODO this seems like a bad idea: in lots of situations [0] will *not*
       //      be the default device. Not sure why this was added instead of
       //      just using getDefaultScreenDevice() below. [fry 211122]
-      awtDisplayDevice = awtDevices[0];
+      // TODO Removing for 4.2, clean this code on next visit. [fry 230218]
+//      awtDisplayDevice = awtDevices[0];
     }
 
     if (awtDisplayDevice == null) {
       awtDisplayDevice = ge.getDefaultScreenDevice();
     }
 
-    return awtDisplayDevice.getDefaultConfiguration().getBounds();
+    //return awtDisplayDevice.getDefaultConfiguration().getBounds();
+    Rectangle bounds = awtDisplayDevice.getDefaultConfiguration().getBounds();
+    float uiScale = Float.parseFloat(System.getProperty("sun.java2d.uiScale", "1.0"));
+    return new Rectangle((int) (uiScale * bounds.getX()),
+              (int) (uiScale * bounds.getY()),
+              (int) (uiScale * bounds.getWidth()),
+              (int) (uiScale * bounds.getHeight()));
   }
 
 
@@ -303,13 +309,20 @@ public class PSurfaceJOGL implements PSurface {
       (PApplet.platform == PConstants.MACOS) ? 1 : sketch.pixelDensity;
 
     boolean spanDisplays = sketch.sketchDisplay() == PConstants.SPAN;
+
     screenRect = spanDisplays ?
+      // TODO probably need to apply this to the spanning version [fry 230218]
       new Rectangle(screen.getX(), screen.getY(),
                     screen.getWidth(), screen.getHeight()) :
-      new Rectangle((int) displayRect.getX(),
-                    (int) displayRect.getY(),
-                    (int) displayRect.getWidth(),
-                    (int) displayRect.getHeight());
+            new Rectangle((int) displayRect.getX(),
+                          (int) displayRect.getY(),
+                          (int) displayRect.getWidth(),
+                          (int) displayRect.getHeight());
+
+//      new Rectangle((int) (uiScale * displayRect.getX()),
+//                    (int) (uiScale * displayRect.getY()),
+//                    (int) (uiScale * displayRect.getWidth()),
+//                    (int) (uiScale * displayRect.getHeight()));
 
     // Set the displayWidth/Height variables inside PApplet, so that they're
     // usable and can even be returned by the sketchWidth()/Height() methods.
@@ -333,6 +346,8 @@ public class PSurfaceJOGL implements PSurface {
     // https://github.com/processing/processing/issues/3545
 
     if (fullScreen || spanDisplays) {
+//      sketchWidth = (int) (uiScale * screenRect.width / windowScaleFactor);
+//      sketchHeight = (int) (uiScale * screenRect.height / windowScaleFactor);
       sketchWidth = screenRect.width / windowScaleFactor;
       sketchHeight = screenRect.height / windowScaleFactor;
     }
@@ -478,7 +493,6 @@ public class PSurfaceJOGL implements PSurface {
   }
 
 
-  @SuppressWarnings("resource")
   private String resourceFilename(String filename) {
     // The code below comes from PApplet.createInputRaw() with a few adaptations
     InputStream stream;
@@ -808,8 +822,11 @@ public class PSurfaceJOGL implements PSurface {
         if (sketchWidth != sketchWidthRequested || sketchHeight != sketchHeightRequested) {
           if (!sketch.sketchFullScreen()) {
             // don't show the message when using fullScreen()
-            PGraphics.showWarning("The sketch has been resized from " +
-                "%d\u2715%d to %d\u2715%d by the window manager.",
+            PGraphics.showWarning(
+              "The sketch has been resized from " +
+                "%dx%d to %dx%d by the operating system.%n" +
+                "This happened outside Processing, " +
+                "and may be a limitation of the OS or window manager.",
               sketchWidthRequested, sketchHeightRequested, sketchWidth, sketchHeight);
           }
         }
@@ -1002,18 +1019,12 @@ public class PSurfaceJOGL implements PSurface {
                        InputEvent.ALT_MASK);
      */
 
-    int peButton = 0;
-    switch (nativeEvent.getButton()) {
-      case com.jogamp.newt.event.MouseEvent.BUTTON1:
-        peButton = PConstants.LEFT;
-        break;
-      case com.jogamp.newt.event.MouseEvent.BUTTON2:
-        peButton = PConstants.CENTER;
-        break;
-      case com.jogamp.newt.event.MouseEvent.BUTTON3:
-        peButton = PConstants.RIGHT;
-        break;
-    }
+    int peButton = switch (nativeEvent.getButton()) {
+      case com.jogamp.newt.event.MouseEvent.BUTTON1 -> PConstants.LEFT;
+      case com.jogamp.newt.event.MouseEvent.BUTTON2 -> PConstants.CENTER;
+      case com.jogamp.newt.event.MouseEvent.BUTTON3 -> PConstants.RIGHT;
+      default -> 0;
+    };
 
     int peCount;
     if (peAction == MouseEvent.WHEEL) {
@@ -1133,58 +1144,39 @@ public class PSurfaceJOGL implements PSurface {
   // Relevant discussion and links here:
   // http://forum.jogamp.org/Newt-wrong-keycode-for-key-td4033690.html#a4033697
   // (I don't think this is a complete solution).
-  @SuppressWarnings("SuspiciousNameCombination")
   private static int mapToPConst(short code) {
-    switch (code) {
-      case com.jogamp.newt.event.KeyEvent.VK_UP:
-        return PConstants.UP;
-      case com.jogamp.newt.event.KeyEvent.VK_DOWN:
-        return PConstants.DOWN;
-      case com.jogamp.newt.event.KeyEvent.VK_LEFT:
-        return PConstants.LEFT;
-      case com.jogamp.newt.event.KeyEvent.VK_RIGHT:
-        return PConstants.RIGHT;
-      case com.jogamp.newt.event.KeyEvent.VK_ALT:
-        return PConstants.ALT;
-      case com.jogamp.newt.event.KeyEvent.VK_CONTROL:
-        return PConstants.CONTROL;
-      case com.jogamp.newt.event.KeyEvent.VK_SHIFT:
-        return PConstants.SHIFT;
-      case com.jogamp.newt.event.KeyEvent.VK_WINDOWS:
-        return java.awt.event.KeyEvent.VK_META;
-      default:
-        return code;
-    }
+    return switch (code) {
+      case com.jogamp.newt.event.KeyEvent.VK_UP -> PConstants.UP;
+      case com.jogamp.newt.event.KeyEvent.VK_DOWN -> PConstants.DOWN;
+      case com.jogamp.newt.event.KeyEvent.VK_LEFT -> PConstants.LEFT;
+      case com.jogamp.newt.event.KeyEvent.VK_RIGHT -> PConstants.RIGHT;
+      case com.jogamp.newt.event.KeyEvent.VK_ALT -> PConstants.ALT;
+      case com.jogamp.newt.event.KeyEvent.VK_CONTROL -> PConstants.CONTROL;
+      case com.jogamp.newt.event.KeyEvent.VK_SHIFT -> PConstants.SHIFT;
+      case com.jogamp.newt.event.KeyEvent.VK_WINDOWS -> java.awt.event.KeyEvent.VK_META;
+      default -> code;
+    };
   }
 
 
   private static boolean isHackyKey(short code) {
-    switch (code) {
-      case com.jogamp.newt.event.KeyEvent.VK_BACK_SPACE:
-      case com.jogamp.newt.event.KeyEvent.VK_TAB:
-      case com.jogamp.newt.event.KeyEvent.VK_ENTER:
-      case com.jogamp.newt.event.KeyEvent.VK_ESCAPE:
-      case com.jogamp.newt.event.KeyEvent.VK_DELETE:
-        return true;
-    }
-    return false;
+    return (code == com.jogamp.newt.event.KeyEvent.VK_BACK_SPACE ||
+            code == com.jogamp.newt.event.KeyEvent.VK_TAB ||
+            code == com.jogamp.newt.event.KeyEvent.VK_ENTER ||
+            code == com.jogamp.newt.event.KeyEvent.VK_ESCAPE ||
+            code == com.jogamp.newt.event.KeyEvent.VK_DELETE);
   }
 
 
   private static char hackToChar(short code, char def) {
-    switch (code) {
-      case com.jogamp.newt.event.KeyEvent.VK_BACK_SPACE:
-        return PConstants.BACKSPACE;
-      case com.jogamp.newt.event.KeyEvent.VK_TAB:
-        return PConstants.TAB;
-      case com.jogamp.newt.event.KeyEvent.VK_ENTER:
-        return PConstants.ENTER;
-      case com.jogamp.newt.event.KeyEvent.VK_ESCAPE:
-        return PConstants.ESC;
-      case com.jogamp.newt.event.KeyEvent.VK_DELETE:
-        return PConstants.DELETE;
-    }
-    return def;
+    return switch (code) {
+      case com.jogamp.newt.event.KeyEvent.VK_BACK_SPACE -> PConstants.BACKSPACE;
+      case com.jogamp.newt.event.KeyEvent.VK_TAB -> PConstants.TAB;
+      case com.jogamp.newt.event.KeyEvent.VK_ENTER -> PConstants.ENTER;
+      case com.jogamp.newt.event.KeyEvent.VK_ESCAPE -> PConstants.ESC;
+      case com.jogamp.newt.event.KeyEvent.VK_DELETE -> PConstants.DELETE;
+      default -> def;
+    };
   }
 
 

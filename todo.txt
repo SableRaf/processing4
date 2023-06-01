@@ -1,25 +1,45 @@
-1291 (4.1.3 or 4.2)
+1293 (4.2.1)
 
-design
-X tool tips for errors/warnings not picking up correct colors
-X   also fix the margins and border
+contribs
+X LSP feature/declaration support from @Efratror
+X   https://github.com/processing/processing4/pull/678
+X   https://github.com/processing/processing4/issues/676
+
+
+_ doing "Save As" on sketch didn't write a new main= entry in sketch.properties
+_   at least with Python Mode
+_ sketchbook entries that use local.properties not getting picked up in sketchbook window
+
+_ should Python Mode rely on Java Mode?
+_   this would let us put ExportPrompt back in there
+_   also add parts of JavaBuild that handle packaging exported apps
+
+_ change the welcome screen to be wide instead of vertical
+
+_ exporting application while still running on Windows
+_   just says "Error during export" rather than something more useful about deleting dir
+
+manager
+_ if contrib (library only?) folder name changes on update, old lib not removed
+_ Updates requiring a reboot give the false impression that they failed (in the updates tab)
+_   https://github.com/processing/processing4/issues/647
+_ lots of folders remaining in 'old' for Modes
+_   were these shut off during debug? need to be moving these to trash (maybe only on startup)
+_ implement automatic updates?
+_   especially with fixes to updates on startup...
+
+manager/design
+_ use down arrow for updates, circle arrow for restart?
 _ completion mode pop-up not following dark and light mode conventions
 _ update console.scrollbar.thumb.rollover.color and console.scrollbar.thumb.pressed.color
 _   currently just using .enabled.color because they weren't in ColorSet
 
-
-_ more contribs manager concurrency problems
-_   https://github.com/processing/processing4/issues/640
-
+_ opening p5jsMode sketch with no local.properties throws an NPE
+_   PDE can't find any files that match the supported extensions
 
 _ export to IntelliJ? how tricky?
 _   just copy jars to /lib?
 _   point to binaries in /Applications/Processing.app? (no)
-
-_ add a protocol handler for pdex and pdez
-_   https://github.com/processing/processing4/issues/559
-
-_ set more build.xml files to use Java 17
 
 
 known issues
@@ -91,6 +111,8 @@ _   malformed proxy issues http://stackoverflow.com/q/376101
 _   docs.oracle.com/javase/7/docs/api/java/net/doc-files/net-properties.html
 _   https://github.com/processing/processing/issues/1476#issuecomment-23229990
 _   https://github.com/processing/processing4/wiki/Preferences#proxies
+_ proxies don't support authentication
+_   https://github.com/processing/processing4/issues/644
 _ right-click/ctrl-click for jump to declaration causes hang
 _   https://github.com/processing/processing4/issues/527
 _   https://github.com/processing/processing4/issues/551
@@ -618,8 +640,6 @@ _ drag and drop
 _   including the number of items added to sketch would be especially nice
 _ implement automatic update
 _   https://github.com/processing/processing/issues/100
-_ need .pde document icons
-_ need .psk file icon
 _ need exported application icons
 _ need more comprehensive list of 'known bugs'
 _ need more comprehensive list of 'known suggestions'
@@ -641,7 +661,6 @@ _ p5 assets need to be licensed differently from the source
 
 DIST / Windows
 
-_ implement document icons for pdez etc on Windows
 _ Resolve “Successfully created” and “illegal reflective access” errors from launch4j
 _   https://github.com/processing/processing4/issues/137
 _ windows batch file would be a good idea (debugging is hard)
@@ -670,6 +689,9 @@ _ windows anti-malware leaves browser stuck at 100%
 _   https://github.com/processing/processing/issues/5893
 _ sign releases on Windows to avoid SmartScreen warnings/errors
 _   https://github.com/processing/processing4/issues/25
+_   https://stackoverflow.com/q/252226
+_   https://cheapsslsecurity.com/sslproducts/codesigningcertificate.html
+_   https://stackoverflow.com/a/66582477
 _   https://www.microsoft.com/security/
 blog/2018/08/16/partnering-with-the-industry-to-minimize-false-positives/
 _   https://shop.certum.eu/open-source-code-signing-code.html

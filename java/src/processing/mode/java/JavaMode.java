@@ -3,7 +3,7 @@
 /*
   Part of the Processing project - http://processing.org
 
-  Copyright (c) 2010-11 Ben Fry and Casey Reas
+  Copyright (c) 2010-23 Ben Fry and Casey Reas
   Copyright (c) 2012-19 The Processing Foundation
 
   This program is free software; you can redistribute it and/or modify
@@ -157,7 +157,7 @@ public class JavaMode extends Mode {
         if (launchInteractive) {
           // fix swing deadlock issue: https://github.com/processing/processing/issues/3928
           EventQueue.invokeLater(() -> {
-            editor.initEditorCode(parser.allHandles, false);
+            editor.initEditorCode(parser.allHandles);
             editor.stopTweakMode(parser.allHandles);
           });
         }
@@ -167,7 +167,7 @@ public class JavaMode extends Mode {
         // fix swing deadlock issue: https://github.com/processing/processing/issues/3928
         EventQueue.invokeLater(() -> {
           // replace editor code with baseCode
-          editor.initEditorCode(parser.allHandles, false);
+          editor.initEditorCode(parser.allHandles);
           editor.updateInterface(parser.allHandles, parser.colorBoxes);
           editor.startTweakMode();
         });

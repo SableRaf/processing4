@@ -3,7 +3,7 @@
 /*
 Part of the Processing project - http://processing.org
 
-Copyright (c) 2012-22 The Processing Foundation
+Copyright (c) 2012-23 The Processing Foundation
 Copyright (c) 2004-12 Ben Fry and Casey Reas
 Copyright (c) 2001-04 Massachusetts Institute of Technology
 
@@ -21,16 +21,7 @@ along with this program; if not, write to the Free Software Foundation,
 Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 */
 
-package processing.mode.java;
-
-import processing.app.Language;
-import processing.app.Platform;
-import processing.app.Preferences;
-import processing.app.SketchException;
-import processing.app.ui.ColorChooser;
-import processing.core.PApplet;
-import processing.data.StringDict;
-import processing.data.StringList;
+package processing.app.ui;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -40,28 +31,40 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+
+import processing.app.Language;
+import processing.app.Platform;
+import processing.app.Preferences;
+import processing.app.platform.MacPlatform;
+
+import processing.core.PApplet;
+import processing.data.StringDict;
+import processing.data.StringList;
 
 
 public class ExportPrompt {
   static final String MACOS_EXPORT_WIKI =
     "https://github.com/processing/processing4/wiki/Exporting-Applications#macos";
-  static final String EXPORT_VARIANTS = "export.application.variants";
+  static public final String EXPORT_VARIANTS = "export.application.variants";
+
+  static public final String JAVA_DOWNLOAD_URL = "https://adoptium.net/";
 
   final JButton exportButton = new JButton(Language.text("prompt.export"));
   final JButton cancelButton = new JButton(Language.text("prompt.cancel"));
 
   List<JCheckBox> variantButtons;
 
-  final JavaEditor editor;
+  final Editor editor;
+  final Runnable callback;
 
-  static ExportPrompt inst;
+//  static ExportPrompt inst;
 
 
-  private ExportPrompt(JavaEditor editor) {
+  public ExportPrompt(Editor editor, Runnable callback) {
     this.editor = editor;
+    this.callback = callback;
 
     String pref = Preferences.get(EXPORT_VARIANTS);
     if (pref == null) {
@@ -108,15 +111,7 @@ public class ExportPrompt {
   }
 
 
-  static protected boolean trigger(JavaEditor editor) throws IOException, SketchException {
-    if (inst == null) {
-      inst = new ExportPrompt(editor);
-    }
-    return inst.trigger();
-  }
-
-
-  protected boolean trigger() throws IOException, SketchException {
+  public void trigger() {
     final JDialog dialog = new JDialog(editor, Language.text("export"), true);
 
     JPanel panel = new JPanel();
@@ -212,7 +207,7 @@ public class ExportPrompt {
     final String warning2b =
       "Users will need to ";
     final String warning3 =
-      "<a href=\"" + JavaBuild.JAVA_DOWNLOAD_URL + "\">" +
+      "<a href=\"" + JAVA_DOWNLOAD_URL + "\">" +
       "install OpenJDK " + PApplet.javaPlatform + "</a>.";
 
     // both are needed because they change as the user hits the checkbox
@@ -222,7 +217,7 @@ public class ExportPrompt {
     final JLabel warningLabel = new JLabel(embed ? embedWarning : nopeWarning);
     warningLabel.addMouseListener(new MouseAdapter() {
       public void mousePressed(MouseEvent event) {
-        Platform.openURL(JavaBuild.JAVA_DOWNLOAD_URL);
+        Platform.openURL(JAVA_DOWNLOAD_URL);
       }
     });
     warningLabel.setBorder(new EmptyBorder(3, 13, 3, 13));
@@ -257,13 +252,13 @@ public class ExportPrompt {
       signPanel.setBorder(new TitledBorder(Language.text("export.code_signing")));
 
       String thePain =
-        "Applications on macOS must be \u201Csigned\u201D and \u201Cnotarized,\u201D " +
+        "Applications on macOS must be “signed” and “notarized,”" +
         "or they will be reported as damaged or unsafe. ";
 
       //if (false && new File("/usr/bin/codesign_allocate").exists()) {
-      if (JavaBuild.isXcodeInstalled()) {
+      if (MacPlatform.isXcodeInstalled()) {
         thePain += "<br/>" +
-          "This application will be \u201Cself-signed\u201D which means that " +
+          "This application will be “self-signed” which means that " +
           "macOS may complain that it comes from an unidentified developer. " +
           "If the application will not run, try right-clicking the app and " +
           "selecting Open from the pop-up menu. " +
@@ -290,14 +285,14 @@ public class ExportPrompt {
 
       area.addMouseListener(new MouseAdapter() {
         public void mousePressed(MouseEvent event) {
-          if (JavaBuild.isXcodeInstalled()) {
+          if (MacPlatform.isXcodeInstalled()) {
             Platform.openURL(MACOS_EXPORT_WIKI);
 
           } else {
             // Launch the process asynchronously
             PApplet.exec("xcode-select", "--install");
             // Reset the installed state so that the message will change.
-            JavaBuild.resetXcodeInstalled();
+            MacPlatform.resetXcodeInstalled();
             // Close the window so that we can rebuild it with different text
             // once they've finished installing the Command Line Tools.
             dialog.setVisible(false);
@@ -346,12 +341,13 @@ public class ExportPrompt {
 
     Object value = optionPane.getValue();
     if (value.equals(exportButton)) {
-      return ((JavaMode) editor.getMode()).handleExportApplication(editor.getSketch());
+      //return ((JavaMode) editor.getMode()).handleExportApplication(editor.getSketch());
+      callback.run();
     } else if (value.equals(cancelButton) || value.equals(-1)) {
       // closed window by hitting Cancel or ESC
       editor.statusNotice(Language.text("export.notice.exporting.cancel"));
     }
-    return false;
+//    return false;
   }
 
 

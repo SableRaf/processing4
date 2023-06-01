@@ -30,10 +30,10 @@
   <property name="examples.dir"
             location="../../processing-examples" />
 
-  <!-- 17.0.5+8 -->
+  <!-- 17.0.6+10 -->
   <property name="jdk.train" value="17" />
-  <property name="jdk.detail" value="${jdk.train}.0.5" />
-  <property name="jdk.build" value="8" />
+  <property name="jdk.detail" value="${jdk.train}.0.6" />
+  <property name="jdk.build" value="10" />
   <property name="jdk.folder" value="jdk-${jdk.detail}+${jdk.build}" />
 
 
@@ -553,9 +553,15 @@
            causes appbundler to remove the extension handling,
            so double-clicking files no longer works. -->
 
-      <bundledocument extensions="pde,pyde"
+      <bundledocument extensions="pde"
                       icon="macos/pde.icns"
                       name="Processing Source Code"
+                      role="Editor">
+      </bundledocument>
+
+      <bundledocument extensions="pyde"
+                      icon="macos/pde.icns"
+                      name="Processing Python Source Code"
                       role="Editor">
       </bundledocument>
 
@@ -570,6 +576,10 @@
                       name="Processing Contribution Bundle"
                       role="Viewer">
       </bundledocument>
+
+      <scheme value="pde">
+        <!-- implements pde:// scheme for URLs -->
+      </scheme>
 
       <!-- !@#*&$ the @2x splash screen implementation was removed by Oracle -->
       <!-- tiffutil -cathidpicheck about.png about\@2x.png -out about.tiff -->
@@ -1289,6 +1299,10 @@
       <fileset file="shared/revisions.md" />
     </copy>
 
+    <copy todir="windows/work/lib" preservelastmodified="true">
+      <fileset dir="windows" includes="*.ico" />
+    </copy>
+
     <fixcrlf file="windows/work/revisions.md" eol="crlf" encoding="UTF-8" />
 
     <antcall target="assemble">
@@ -1493,7 +1507,7 @@
       <arg line="core -type f -exec rm -rf {} ';'" />
     </exec>
 
-    <javadoc access="public" author="false" classpath="../core/library/jogl-all.jar:../core/bin:../core/library/gluegen-rt.jar" destdir="javadoc/core" nodeprecated="false" nodeprecatedlist="false" noindex="false" nonavbar="false" notree="false" source="11" splitindex="false" use="false" version="false">
+    <javadoc access="public" author="false" classpath="../core/library/jogl-all.jar:../core/bin:../core/library/gluegen-rt.jar" destdir="javadoc/core" nodeprecated="false" nodeprecatedlist="false" noindex="false" nonavbar="false" notree="false" source="17" splitindex="false" use="false" version="false">
 
       <!-- provide links for java.* classes.
            also suppresses the java.lang prefix in the text.  -->
@@ -1532,7 +1546,7 @@
       <arg line="everything -type f -exec rm -rf {} ';'" />
     </exec>
 
-    <javadoc access="public" author="false" classpath="../app/lib/ant.jar:../app/lib/ant-launcher.jar:../app/lib/jna.jar:../app/lib/jna-platform.jar:../core/bin:../core/library/gluegen-rt.jar:../core/library/jogl-all.jar:../java/libraries/svg:../java/libraries/pdf/library/itext.jar:../java/libraries/dxf:../java/libraries/serial/library:${java.home}/lib/tools.jar" destdir="javadoc/everything" nodeprecated="false" nodeprecatedlist="false" noindex="false" nonavbar="false" notree="false" source="11" splitindex="false" use="false" version="false" noqualifier="all">
+    <javadoc access="public" author="false" classpath="../app/lib/ant.jar:../app/lib/ant-launcher.jar:../app/lib/jna.jar:../app/lib/jna-platform.jar:../core/bin:../core/library/gluegen-rt.jar:../core/library/jogl-all.jar:../java/libraries/svg:../java/libraries/pdf/library/itext.jar:../java/libraries/dxf:../java/libraries/serial/library:${java.home}/lib/tools.jar" destdir="javadoc/everything" nodeprecated="false" nodeprecatedlist="false" noindex="false" nonavbar="false" notree="false" source="17" splitindex="false" use="false" version="false" noqualifier="all">
 
       <arg value="-notimestamp" />
 
@@ -1570,7 +1584,7 @@
       <arg line="libraries -type f -exec rm -rf {} ';'" />
     </exec>
 
-    <javadoc access="public" author="false" classpath="../app/lib/ant.jar:../app/lib/ant-launcher.jar:../app/lib/jna.jar:../app/lib/jna-platform.jar:../core/bin:../core/library/gluegen-rt.jar:../core/library/jogl-all.jar:../java/libraries/svg/library/batik.jar:../java/libraries/pdf/library/itext.jar:../java/libraries/dxf:../java/libraries/serial/library/jssc.jar:${java.home}/lib/tools.jar" destdir="javadoc/libraries" nodeprecated="false" nodeprecatedlist="false" noindex="false" nonavbar="false" notree="false" source="11" splitindex="false" use="false" version="false" noqualifier="all">
+    <javadoc access="public" author="false" classpath="../app/lib/ant.jar:../app/lib/ant-launcher.jar:../app/lib/jna.jar:../app/lib/jna-platform.jar:../core/bin:../core/library/gluegen-rt.jar:../core/library/jogl-all.jar:../java/libraries/svg/library/batik.jar:../java/libraries/pdf/library/itext.jar:../java/libraries/dxf:../java/libraries/serial/library/jssc.jar:${java.home}/lib/tools.jar" destdir="javadoc/libraries" nodeprecated="false" nodeprecatedlist="false" noindex="false" nonavbar="false" notree="false" source="17" splitindex="false" use="false" version="false" noqualifier="all">
 
       <arg value="-notimestamp" />
 
