@@ -8,5 +8,7 @@ Reference the issue this pull request addresses, if applicable. Use the GitHub `
 
 ### Checklist
 
+Please confirm the following:
+
 - [ ] I have built Processing locally using the instructions in [BUILD.md](https://github.com/processing/processing4/blob/main/BUILD.md)
 - [ ] I have tested my changes and confirmed they work as expected
