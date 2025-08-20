@@ -15,6 +15,27 @@
 ./gradlew package
 ```
 
+## Debug and Verbose Output
+```bash
+# Detailed debug output
+./gradlew run --debug
+
+# Info level logging (less verbose than debug)
+./gradlew run --info
+
+# Show stack traces on failures
+./gradlew run --stacktrace
+
+# Debug output for builds
+./gradlew build --debug
+
+# Verbose test output
+./gradlew test --info
+
+# Combined debug and stack traces
+./gradlew run --debug --stacktrace
+```
+
 ## Platform-Specific Commands
 ```bash
 # Linux/macOS
@@ -36,6 +57,9 @@
 
 # Build specific module
 ./gradlew :core:build
+
+# Development LSP server
+./gradlew lsp-develop
 ```
 
 ## IDE Setup (IntelliJ IDEA)

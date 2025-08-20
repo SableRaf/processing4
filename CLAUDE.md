@@ -31,6 +31,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # Development LSP server (for IDE development)
 ./gradlew lsp-develop
+
+# Debug and verbose output
+./gradlew run --debug          # Detailed debug output
+./gradlew run --info           # Info level logging
+./gradlew run --stacktrace     # Show stack traces on failures
+./gradlew build --debug        # Debug output for builds
+./gradlew test --info          # Verbose test output
 ```
 
 ### Platform-specific
