@@ -90,6 +90,13 @@ Processing 4 consists of three interdependent modules with distinct responsibili
 - **Comments**: One space after `//`, two spaces before `//` at end of lines
 - **Arrays**: Use `String[] lines` not `String lines[]`
 
+### Logging Practices
+- **Debug Logging**: Use `Messages.log("message")` instead of `println()` or `System.out.println()`
+- **Error Logging**: Use `Messages.err("message")` for debug-level errors
+- **User Messages**: Use `Messages.showWarning()`, `Messages.showMessage()`, or `Messages.showError()` for user-facing messages
+- **Debug Control**: All `Messages.log()` and `Messages.err()` calls are controlled by `Base.DEBUG` flag
+- **Message Format**: Prefix with component name: `"Schema: Processing URI path"`
+
 ## Development Workflow
 
 ### Testing Core Changes
