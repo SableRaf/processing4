@@ -10,6 +10,8 @@ import org.mockito.Mockito.mockStatic
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import java.io.File
+import java.io.ByteArrayOutputStream
+import java.util.zip.GZIPOutputStream
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.test.Test
@@ -129,6 +131,168 @@ class SchemaTest {
             Preferences.set("test", "value")
             Preferences.save()
         }
+    }
+    
+    @OptIn(ExperimentalEncodingApi::class)
+    @Test
+    fun testGzipBase64Sketch() {
+        val sketch = """
+        void setup(){
+            size(640, 360);
+        }
+        void draw(){
+            background(0);
+            ellipse(mouseX, mouseY, 50, 50);
+        }
+        """.trimIndent()
+        
+        // Create compressed version
+        val compressedData = compressToGzip(sketch.toByteArray())
+        val compressedBase64 = Base64.encode(compressedData)
+        
+        // Verify compression is actually reducing size
+        assert(compressedBase64.length < Base64.encode(sketch.toByteArray()).length)
+        
+        Schema.handleSchema("pde://sketch/base64/$compressedBase64", base)
+        
+        val captor = ArgumentCaptor.forClass(String::class.java)
+        verify(base).handleOpenUntitled(captor.capture())
+        
+        val file = File(captor.value)
+        assert(file.exists())
+        assert(file.readText() == sketch)
+        file.parentFile.deleteRecursively()
+    }
+    
+    @OptIn(ExperimentalEncodingApi::class)
+    @Test
+    fun testGzipBase64SketchWithExtraFiles() {
+        val sketch = """
+        void setup(){
+            // Test sketch
+        }
+        void draw(){
+            // Test draw
+        }
+        """.trimIndent()
+        
+        val extraFile = """
+        class TestClass {
+            void testMethod() {
+                println("test");
+            }
+        }
+        """.trimIndent()
+        
+        // Create compressed version of main sketch
+        val compressedData = compressToGzip(sketch.toByteArray())
+        val compressedBase64 = Base64.encode(compressedData)
+        
+        // Extra file as base64 (can be compressed or not)
+        val extraBase64 = Base64.encode(extraFile.toByteArray())
+        
+        Schema.handleSchema("pde://sketch/base64/$compressedBase64?pde=TestClass:$extraBase64", base)
+        
+        val captor = ArgumentCaptor.forClass(String::class.java)
+        verify(base).handleOpenUntitled(captor.capture())
+        
+        val file = File(captor.value)
+        assert(file.exists())
+        assert(file.readText() == sketch)
+        
+        val extra = file.parentFile.resolve("TestClass.pde")
+        assert(extra.exists())
+        assert(extra.readText() == extraFile)
+        
+        file.parentFile.deleteRecursively()
+    }
+    
+    @OptIn(ExperimentalEncodingApi::class)
+    @Test
+    fun testBackwardCompatibilityBase64() {
+        // Test that simple base64 URIs still work (without gzip)
+        val sketch = """
+        void setup(){
+            size(400, 400);
+        }
+        void draw(){
+            fill(255, 0, 0);
+            ellipse(200, 200, 100, 100);
+        }
+        """.trimIndent()
+        
+        val base64 = Base64.encode(sketch.toByteArray())
+        Schema.handleSchema("pde://sketch/base64/$base64", base)
+        
+        val captor = ArgumentCaptor.forClass(String::class.java)
+        verify(base).handleOpenUntitled(captor.capture())
+        
+        val file = File(captor.value)
+        assert(file.exists())
+        assert(file.readText() == sketch)
+        file.parentFile.deleteRecursively()
+    }
+    
+    @OptIn(ExperimentalEncodingApi::class)
+    @Test
+    fun testSpecificBase64URI() {
+        // Test simple base64 URI (already encoded)
+        val expectedSketch = "// Sketch Link Success!\n\nvoid setup(){\n}\n\nvoid draw(){\n}"
+        Schema.handleSchema("pde://sketch/base64/Ly8gU2tldGNoIExpbmsgU3VjY2VzcyEKCnZvaWQgc2V0dXAoKXsKfQoKdm9pZCBkcmF3KCl7Cn0=", base)
+        
+        val captor = ArgumentCaptor.forClass(String::class.java)
+        verify(base).handleOpenUntitled(captor.capture())
+        
+        val file = File(captor.value)
+        assert(file.exists())
+        assert(file.readText() == expectedSketch)
+        file.parentFile.deleteRecursively()
+    }
+
+    @OptIn(ExperimentalEncodingApi::class)
+    @Test
+    fun testSpecificGzipBase64URI() {
+        // Test simple gzip sketch (already encoded)
+        val expectedSketch = "// Sketch Link Success!\n\nvoid setup(){\n}\n\nvoid draw(){\n}"
+        Schema.handleSchema("pde://sketch/base64/eNrT11cIzk4tSc5Q8MnMy1YILk1OTi0uVuTiKsvPTFEoTi0pLdDQrOaqhQqkFCWWg/kAAOMR+g==", base)
+
+        val captor = ArgumentCaptor.forClass(String::class.java)
+        verify(base).handleOpenUntitled(captor.capture())
+
+        val file = File(captor.value)
+        assert(file.exists())
+        assert(file.readText() == expectedSketch)
+        file.parentFile.deleteRecursively()
+    }
+
+    @OptIn(ExperimentalEncodingApi::class)
+    @Test
+    // test that both gzip and base64 give the same output
+    fun testGzipAndBase64Equivalence() {
+        val sketch = """
+        void setup(){
+            size(400, 400);
+        }
+        void draw(){
+            fill(255, 0, 0);
+            ellipse(200, 200, 100, 100);
+        }
+        """.trimIndent()
+
+        val gzipCompressed = compressToGzip(sketch.toByteArray())
+        val gzipBase64 = Base64.encode(gzipCompressed)
+
+        val base64 = Base64.encode(sketch.toByteArray())
+
+        assert(gzipBase64 == base64)
+    }
+
+    private fun compressToGzip(data: ByteArray): ByteArray {
+        val baos = ByteArrayOutputStream()
+        GZIPOutputStream(baos).use { gzipOut ->
+            gzipOut.write(data)
+        }
+        return baos.toByteArray()
     }
 
     fun waitForSchemeJobsToComplete(){
