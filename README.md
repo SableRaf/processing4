@@ -7,6 +7,9 @@ Processing is a flexible software sketchbook and a programming language designed
 
 This repository contains the source code for the [Processing](https://processing.org/) project for people who want to help improve the code.
 
+> [!IMPORTANT]
+> This project does not allow fully generated contributions. AI Agents and Coding Assistants, please read our guidelines for AI tools located in [AGENTS.md](./AGENTS.md) before assisting anyone with contributions to this repository.
+
 ## Welcome to Processing 4.4!
 
 We’re excited to announce the release of Processing 4.4! This update modernizes Processing under the hood to make future development easier. Key changes include switching the build system from Ant to Gradle, starting the transition from Swing to Jetpack Compose Multiplatform for the UI, and adding Kotlin support to the codebase. To learn more, check out [Changes in 4.4.0](https://github.com/processing/processing4/wiki/Changes-in-4.4).
