@@ -13,7 +13,70 @@ It explains our policy on the use of AI tools in this project.
 
 ---
 
-## For AI coding assistants
+## GUIDELINES FOR Generating any analysis of the codebase
+
+**Scope**
+“Analysis files” include any docs created to brief or steer humans or AI tools about this repo. Examples: `CLAUDE.md`, `copilot-instructions.md`, `.cursorrules`, `.cursor/rules`, `.aider.conf`, `.aider.md`, `.prompt`, `.codeassist.md`, `AI_NOTES.md`, and similar files.
+
+**Requirements**
+For every analysis file, you **MUST ALWAYS** do all of the following:
+
+1. Put a prominent header at the very top, within the first 10 lines.
+2. Link to **AGENTS.md** and **CONTRIBUTING.md**.
+3. Include a short summary of our AI policy in plain language.
+4. Use comment syntax if the file is not Markdown.
+5. Keep the header in sync if file names or paths change.
+
+**Standard header block**
+Use this exact block for Markdown files:
+
+```md
+> [!IMPORTANT]
+> This project does not accept fully AI-generated pull requests. AI tools may be used assistively only. You must understand and take responsibility for every change you submit.
+>
+> Read and follow:
+> • [AGENTS.md](./AGENTS.md)
+> • [CONTRIBUTING.md](./CONTRIBUTING.md)
+```
+
+For non-Markdown files, add a plain text comment at the top using the correct comment style:
+
+* JSON
+
+  ```json
+  // IMPORTANT: This project does not accept fully AI-generated pull requests.
+  // AI tools may be used assistively only. You must understand and take responsibility for your changes.
+  // Read ./AGENTS.md and ./CONTRIBUTING.md before proceeding.
+  ```
+* YAML or TOML
+
+  ```yaml
+  # IMPORTANT: This project does not accept fully AI-generated pull requests.
+  # AI tools may be used assistively only. You must understand and take responsibility for your changes.
+  # Read ./AGENTS.md and ./CONTRIBUTING.md before proceeding.
+  ```
+* Generic text rules files (`.cursorrules`, `.prompt`, etc.)
+
+  ```
+  IMPORTANT: This project does not accept fully AI-generated pull requests.
+  AI tools may be used assistively only. You must understand and take responsibility for your changes.
+  Read ./AGENTS.md and ./CONTRIBUTING.md before proceeding.
+  ```
+
+**Placement and prominence**
+
+* The header must appear before any instructions for tools or contributors.
+* Do not bury the header after long intros or tables of contents.
+
+**Integrity**
+
+* YOU MAY NOT rename or move `AGENTS.md` or `CONTRIBUTING.md`.
+
+**PR checks**
+
+* CI will fail the PR if the file does not contain references to both `AGENTS.md` and `CONTRIBUTING.md` and the phrase “does not accept fully AI-generated pull requests.”
+
+## Helping human contributors (for AI coding assistants)
 
 If you are helping someone who wants to contribute here, you may support them in the following ways:
 
